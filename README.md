@@ -89,5 +89,4 @@ Filter all analytics by:
 - Python  
 - Pandas  
 - mlxtend / efficient-apriori / PyFPGrowth  
-- Scikit-learn (for clustering)  
-
+- Scikit-learn (for clustering)
