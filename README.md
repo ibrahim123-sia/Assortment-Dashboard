@@ -101,5 +101,4 @@ Filter all analytics by:
 - **Revenue Impact Chart**  
 - **Seasonal Assortment View**  
 - **Store/Region-Based Filtering Panel**  
-## 🧠 Workflow
 
