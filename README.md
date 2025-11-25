@@ -91,14 +91,3 @@ Filter all analytics by:
 - mlxtend / efficient-apriori / PyFPGrowth  
 - Scikit-learn (for clustering)  
 
----
-
-## 📊 Dashboard Modules
-
-- **Frequent Itemsets Network Graph**  
-- **Association Rules Table**  
-- **Suggested Bundles Section**  
-- **Revenue Impact Chart**  
-- **Seasonal Assortment View**  
-- **Store/Region-Based Filtering Panel**  
-
