@@ -60,5 +60,51 @@ Filter all analytics by:
 
 ---
 
+**Backend Responsibilities:**
+- Data cleaning & transformation  
+- Running FP-Growth/Apriori  
+- Building association rules  
+- Product clustering  
+- Seasonal analysis  
+- Revenue calculations  
+- Exposing results via REST API  
+
+**Frontend Responsibilities:**
+- Network graph visualization  
+- Interactive tables, filters, charts  
+- Rendering bundles & revenue impact  
+- Seasonal dashboards  
+
+---
+
+## 🧰 Tech Stack
+
+### **Frontend**
+- React  
+- Recharts / D3.js  
+- TailwindCSS / Material UI  
+
+### **Backend**
+- FastAPI  
+- Python  
+- Pandas  
+- mlxtend / efficient-apriori / PyFPGrowth  
+- Scikit-learn (for clustering)  
+
+---
+
+## 📊 Dashboard Modules
+
+- **Frequent Itemsets Network Graph**  
+- **Association Rules Table**  
+- **Suggested Bundles Section**  
+- **Revenue Impact Chart**  
+- **Seasonal Assortment View**  
+- **Store/Region-Based Filtering Panel**  
+
+---
+
+
+
 ## 🧠 Workflow
 
