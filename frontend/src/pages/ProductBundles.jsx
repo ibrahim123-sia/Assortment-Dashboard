@@ -1,271 +1,288 @@
-import React, { useState, useEffect } from 'react';
-import { useApi } from '../context/ApiContext';
-import { 
-  Package, 
-  TrendingUp, 
-  Zap, 
-  CheckCircle,
-  ShoppingCart,
-  DollarSign,
-  Users,
-  Star,
-  Target
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { FilterPanel } from '../components/FilterPanel';
+import { DataTable } from '../components/DataTable';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { Package, TrendingUp, DollarSign, Tag } from 'lucide-react';
 
-const ProductBundles = () => {
-  const { getSuggestedBundles, loading } = useApi();
+export const ProductBundles = () => {
+  const [loading, setLoading] = useState(true);
   const [bundles, setBundles] = useState([]);
-  const [sortBy, setSortBy] = useState('lift');
-  const [selectedBundle, setSelectedBundle] = useState(null);
+  const [filters, setFilters] = useState({
+    min_confidence: 0.5,
+    country: 'all',
+    year: 'all',
+    month: 'all',
+  });
 
   useEffect(() => {
-    loadBundles();
-  }, []);
+    fetchBundles();
+  }, [filters]);
 
-  const loadBundles = async () => {
-    const data = await getSuggestedBundles({});
-    setBundles(data.bundles);
-    if (data.bundles.length > 0) {
-      setSelectedBundle(data.bundles[0]);
+  const fetchBundles = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get('/api/suggested_bundles', {
+        params: filters,
+      });
+
+      if (response.data.success) {
+        setBundles(response.data.bundles || []);
+      }
+    } catch (error) {
+      console.error('Error fetching bundles:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const sortBundles = (bundles) => {
-    switch(sortBy) {
-      case 'lift':
-        return [...bundles].sort((a, b) => b.lift - a.lift);
-      case 'confidence':
-        return [...bundles].sort((a, b) => b.confidence - a.confidence);
-      case 'uplift':
-        return [...bundles].sort((a, b) => parseFloat(b.projectedUplift) - parseFloat(a.projectedUplift));
-      default:
-        return bundles;
-    }
-  };
-
-  const getBundleScore = (bundle) => {
-    const liftScore = bundle.lift * 20;
-    const confidenceScore = bundle.confidence * 30;
-    const upliftScore = parseFloat(bundle.projectedUplift) * 2;
-    return Math.min(Math.round(liftScore + confidenceScore + upliftScore), 100);
-  };
-
-  const getScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600 bg-green-100';
-    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
-  };
-
-  const sortedBundles = sortBundles(bundles);
+  const columns = [
+    {
+      key: 'bundle_id',
+      title: 'Bundle ID',
+      sortable: true,
+      render: (value) => (
+        <span className="font-mono font-bold text-primary-600">{value}</span>
+      ),
+    },
+    {
+      key: 'products',
+      title: 'Products in Bundle',
+      sortable: false,
+      render: (value) => (
+        <div className="flex flex-wrap gap-1">
+          {value.slice(0, 3).map((product, idx) => (
+            <span
+              key={idx}
+              className="inline-block bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded"
+            >
+              {product.length > 20 ? product.substring(0, 20) + '...' : product}
+            </span>
+          ))}
+          {value.length > 3 && (
+            <span className="inline-block text-xs text-gray-500 dark:text-gray-400">
+              +{value.length - 3} more
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'bundle_size',
+      title: 'Size',
+      sortable: true,
+      render: (value) => (
+        <div className="text-center">
+          <span className="font-bold text-gray-900 dark:text-white">{value}</span>
+          <div className="text-xs text-gray-500 dark:text-gray-400">products</div>
+        </div>
+      ),
+    },
+    {
+      key: 'confidence',
+      title: 'Confidence',
+      sortable: true,
+      render: (value) => (
+        <div className="text-center">
+          <span className="font-bold text-gray-900 dark:text-white">
+            {(value * 100).toFixed(1)}%
+          </span>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
+            <div
+              className="bg-green-600 h-1.5 rounded-full"
+              style={{ width: `${value * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'estimated_revenue',
+      title: 'Est. Revenue',
+      sortable: true,
+      render: (value) => (
+        <div className="text-right">
+          <div className="flex items-center justify-end">
+            <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
+            <span className="font-bold text-gray-900 dark:text-white">
+              {value.toFixed(2)}
+            </span>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">per bundle</div>
+        </div>
+      ),
+    },
+    {
+      key: 'lift',
+      title: 'Lift',
+      sortable: true,
+      render: (value) => (
+        <div
+          className={`font-bold text-center ${
+            value > 1.5
+              ? 'text-green-600'
+              : value > 1
+              ? 'text-yellow-600'
+              : 'text-red-600'
+          }`}
+        >
+          {value.toFixed(2)}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center">
-            <Package className="mr-3" size={28} />
-            Suggested Product Bundles
-          </h2>
-          <p className="text-gray-600 mt-1">
-            AI-generated product bundles optimized for cross-selling and revenue uplift
-          </p>
-        </div>
-        <div className="flex space-x-3 mt-4 md:mt-0">
-          <select 
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-          >
-            <option value="lift">Sort by Lift</option>
-            <option value="confidence">Sort by Confidence</option>
-            <option value="uplift">Sort by Uplift</option>
-          </select>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
-            <Target size={18} className="mr-2" />
-            Generate Bundles
-          </button>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Suggested Product Bundles
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">
+          Intelligent product bundles based on association rules
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Bundle List */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold">Recommended Bundles ({bundles.length})</h3>
+      <FilterPanel onFilterChange={setFilters} loading={loading} />
+
+      {/* Bundle Stats */}
+      {!loading && bundles.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="card">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Total Bundles
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {bundles.length}
+                </p>
+              </div>
             </div>
-            
-            {loading ? (
-              <div className="p-12 text-center">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                <p className="mt-4 text-gray-600">Generating optimal bundles...</p>
+          </div>
+          <div className="card">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
+                <Tag className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
-            ) : (
-              <div className="divide-y divide-gray-200">
-                {sortedBundles.map((bundle) => (
-                  <div
-                    key={bundle.id}
-                    onClick={() => setSelectedBundle(bundle)}
-                    className={`p-6 hover:bg-gray-50 cursor-pointer transition-all ${
-                      selectedBundle?.id === bundle.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center mb-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
-                            getBundleScore(bundle).includes('green') ? 'bg-green-100' : 
-                            getBundleScore(bundle).includes('yellow') ? 'bg-yellow-100' : 'bg-red-100'
-                          }`}>
-                            <span className={`font-bold ${getBundleScore(bundle).split(' ')[0]}`}>
-                              {getBundleScore(bundle)}%
-                            </span>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-lg">Bundle {bundle.id}</h4>
-                            <p className="text-gray-600">AI-generated based on purchase patterns</p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {bundle.products.map((product, index) => (
-                            <React.Fragment key={product}>
-                              <span className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg font-medium">
-                                {product}
-                              </span>
-                              {index < bundle.products.length - 1 && (
-                                <span className="text-gray-400 font-bold">+</span>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="text-center">
-                            <div className="flex items-center justify-center text-green-600 mb-1">
-                              <TrendingUp size={20} />
-                            </div>
-                            <div className="text-sm font-semibold">{bundle.lift.toFixed(2)}</div>
-                            <div className="text-xs text-gray-500">Lift</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="flex items-center justify-center text-blue-600 mb-1">
-                              <CheckCircle size={20} />
-                            </div>
-                            <div className="text-sm font-semibold">{(bundle.confidence * 100).toFixed(1)}%</div>
-                            <div className="text-xs text-gray-500">Confidence</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="flex items-center justify-center text-purple-600 mb-1">
-                              <Zap size={20} />
-                            </div>
-                            <div className="text-sm font-semibold">{bundle.projectedUplift}</div>
-                            <div className="text-xs text-gray-500">Uplift</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <button className="ml-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        <ShoppingCart size={20} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="ml-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Avg. Bundle Size
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {(
+                    bundles.reduce((acc, b) => acc + b.bundle_size, 0) /
+                    bundles.length
+                  ).toFixed(1)}
+                </p>
               </div>
-            )}
+            </div>
+          </div>
+          <div className="card">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+                <DollarSign className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Total Est. Revenue
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  $
+                  {bundles
+                    .reduce((acc, b) => acc + b.estimated_revenue, 0)
+                    .toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                <TrendingUp className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Avg. Confidence
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {(
+                    (bundles.reduce((acc, b) => acc + b.confidence, 0) /
+                      bundles.length) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </p>
+              </div>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Bundle Details & Actions */}
-        <div className="space-y-6">
-          {selectedBundle ? (
-            <>
-              {/* Bundle Details */}
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold mb-6">Bundle Details</h3>
-                
-                <div className="space-y-6">
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-3">Bundle Composition</h4>
-                    <div className="space-y-3">
-                      {selectedBundle.products.map((product, index) => (
-                        <div key={product} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-8 h-8 bg-white border rounded-lg flex items-center justify-center mr-3">
-                              <span className="font-bold">{index + 1}</span>
-                            </div>
-                            <span className="font-medium">{product}</span>
-                          </div>
-                          <span className="text-gray-600">25% weight</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-3">Performance Metrics</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span>Bundle Score</span>
-                          <span className="font-semibold">{getBundleScore(selectedBundle)}/100</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              getBundleScore(selectedBundle) >= 80 ? 'bg-green-500' :
-                              getBundleScore(selectedBundle) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${getBundleScore(selectedBundle)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center p-3 bg-green-50 rounded-lg">
-                          <div className="text-green-600 font-bold text-xl">{(selectedBundle.lift * 10).toFixed(0)}</div>
-                          <div className="text-xs text-gray-600">Cross-sell Potential</div>
-                        </div>
-                        <div className="text-center p-3 bg-blue-50 rounded-lg">
-                          <div className="text-blue-600 font-bold text-xl">{(selectedBundle.confidence * 100).toFixed(0)}%</div>
-                          <div className="text-xs text-gray-600">Purchase Probability</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Panel */}
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="text-lg font-semibold mb-6">Bundle Actions</h3>
-                <div className="space-y-3">
-                  <button className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">
-                    <ShoppingCart className="mr-2" size={20} />
-                    Implement Bundle Strategy
-                  </button>
-                  <button className="w-full px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center">
-                    <Target className="mr-2" size={20} />
-                    A/B Test This Bundle
-                  </button>
-                  <button className="w-full px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center">
-                    <Users className="mr-2" size={20} />
-                    Create Marketing Campaign
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-              <Package size={48} className="mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-600">Select a bundle to view details</p>
-            </div>
-          )}
+      {/* Bundles Table */}
+      <div className="card">
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Recommended Product Bundles
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Suggested bundles based on association rules with confidence ≥{' '}
+            {(filters.min_confidence * 100).toFixed(0)}%
+          </p>
         </div>
+
+        {loading ? (
+          <LoadingSpinner />
+        ) : bundles.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 dark:text-gray-500 mb-4">
+              <Package className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              No bundles found
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Try adjusting the confidence threshold or filters
+            </p>
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={bundles}
+            itemsPerPage={10}
+            onRowClick={(bundle) => console.log('Bundle selected:', bundle)}
+          />
+        )}
       </div>
+
+      {/* Action Section */}
+      {!loading && bundles.length > 0 && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Ready to implement these bundles?
+              </h4>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Export the selected bundles for your marketing team
+              </p>
+            </div>
+            <div className="flex space-x-3 mt-4 md:mt-0">
+              <button className="btn-secondary">
+                <Package className="h-4 w-4 mr-2" />
+                Export as CSV
+              </button>
+              <button className="btn-primary">
+                <DollarSign className="h-4 w-4 mr-2" />
+                Create Promotion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-export default ProductBundles;

@@ -10,10 +10,13 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
+    "axios": "^1.13.2",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.559.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-dropzone": "^14.3.8",
+    "react-force-graph-2d": "^1.29.0",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1"
