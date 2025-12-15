@@ -15,18 +15,19 @@ export const SeasonalAnalysis = () => {
   }, []);
 
   const fetchSeasonalData = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get('/api/seasonal_data');
-      if (response.data.success) {
-        setSeasonalData(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching seasonal data:', error);
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    const response = await axios.get('/api/seasonal_data');
+    if (response.data.success) {
+      // FIX: Access the data property
+      setSeasonalData(response.data); // This should be response.data
     }
-  };
+  } catch (error) {
+    console.error('Error fetching seasonal data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const monthColumns = [
     { key: 'month_name', title: 'Month', sortable: true },

@@ -3,15 +3,17 @@ import axios from 'axios';
 import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { TrendingUp, Target, Link2 } from 'lucide-react';
+import { TrendingUp, Target, Link2, AlertCircle } from 'lucide-react';
 
 export const AssociationRules = () => {
   const [loading, setLoading] = useState(true);
   const [rules, setRules] = useState([]);
   const [stats, setStats] = useState(null);
+  const [error, setError] = useState(null);
+  const [dataSummary, setDataSummary] = useState(null);
   const [filters, setFilters] = useState({
-    min_support: 0.02,
-    min_confidence: 0.3,
+    min_support: 0.005,  // Lowered for better results
+    min_confidence: 0.2,  // Lowered for better results
     country: 'all',
     year: 'all',
     month: 'all',
@@ -20,12 +22,34 @@ export const AssociationRules = () => {
     simple: true,
   });
 
+  // Fetch data summary on mount
   useEffect(() => {
-    fetchAssociationRules();
-  }, [filters]);
+    fetchDataSummary();
+  }, []);
+
+  // Fetch association rules when filters change
+  useEffect(() => {
+    if (dataSummary) {
+      fetchAssociationRules();
+    }
+  }, [filters, dataSummary]);
+
+  const fetchDataSummary = async () => {
+    try {
+      const response = await axios.get('/api/summary');
+      if (response.data.success) {
+        setDataSummary(response.data.data);
+        console.log('Data summary loaded:', response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data summary:', error);
+    }
+  };
 
   const fetchAssociationRules = async () => {
     setLoading(true);
+    setError(null);
+    
     try {
       const response = await axios.get('/api/association_rules', {
         params: {
@@ -33,6 +57,8 @@ export const AssociationRules = () => {
           simple: filters.simple
         },
       });
+
+      console.log('API Response:', response.data);
 
       if (response.data.success) {
         setRules(response.data.data || []);
@@ -42,51 +68,56 @@ export const AssociationRules = () => {
           processing_time: 0.5,
           performance: 'fast'
         });
+        
+        if (!response.data.data || response.data.data.length === 0) {
+          setError({
+            type: 'no_data',
+            message: 'No association rules found. Try lowering the support/confidence thresholds.',
+            details: response.data.metadata?.note || 'Insufficient co-purchasing patterns in data'
+          });
+        }
+      } else {
+        setError({
+          type: 'api_error',
+          message: 'Failed to fetch association rules',
+          details: response.data.error || 'Unknown error'
+        });
+        setRules([]);
       }
     } catch (error) {
       console.error('Error fetching association rules:', error);
-      // Fallback to sample data
-      setRules([
-        {
-          rule: 'WHITE HANGING HEART T-LIGHT HOLDER → JUMBO BAG RED RETROSPOT',
-          confidence: 0.85,
-          lift: 2.1,
-          support: 0.045
-        },
-        {
-          rule: 'PARTY BUNTING → SET OF 3 CAKE TINS PANTRY DESIGN',
-          confidence: 0.72,
-          lift: 1.8,
-          support: 0.032
-        },
-        {
-          rule: 'RED WOOLLY HOTTIE WHITE HEART → SPOTTY BUNTING',
-          confidence: 0.68,
-          lift: 1.5,
-          support: 0.028
-        },
-        {
-          rule: 'JUMBO BAG RED RETROSPOT → SPOTTY BUNTING',
-          confidence: 0.61,
-          lift: 1.4,
-          support: 0.025
-        },
-        {
-          rule: 'SET OF 3 CAKE TINS PANTRY DESIGN → PACK OF 72 RETROSPOT CAKE CASES',
-          confidence: 0.58,
-          lift: 1.3,
-          support: 0.022
-        }
-      ]);
-      setStats({
-        total_rules_found: 5,
-        sample_size: 10000,
-        processing_time: 0.2,
-        performance: 'fast'
+      setError({
+        type: 'network_error',
+        message: 'Failed to connect to server',
+        details: error.message || 'Check if backend is running on port 5000'
       });
+      setRules([]);
+      setStats(null);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = () => {
+    setFilters({
+      ...filters,
+      min_support: 0.001,  // Even lower threshold
+      min_confidence: 0.1,  // Even lower threshold
+      sample_size: Math.min(20000, dataSummary?.total_transactions || 10000)
+    });
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      min_support: 0.005,
+      min_confidence: 0.2,
+      country: 'all',
+      year: 'all',
+      month: 'all',
+      sample_size: 10000,
+      limit: 50,
+      simple: true,
+    });
   };
 
   const columns = filters.simple ? [
@@ -112,7 +143,7 @@ export const AssociationRules = () => {
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
             <div
               className="bg-green-600 h-1.5 rounded-full"
-              style={{ width: `${typeof value === 'number' ? value * 100 : 0}%` }}
+              style={{ width: `${typeof value === 'number' ? Math.min(value * 100, 100) : 0}%` }}
             ></div>
           </div>
         </div>
@@ -128,6 +159,16 @@ export const AssociationRules = () => {
           {value > 1 && (
             <TrendingUp className="inline-block ml-1 h-4 w-4" />
           )}
+        </div>
+      ),
+    },
+    {
+      key: 'support',
+      title: 'Support',
+      sortable: true,
+      render: (value) => (
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          {(value * 100).toFixed(2)}%
         </div>
       ),
     },
@@ -172,7 +213,7 @@ export const AssociationRules = () => {
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
             <div
               className="bg-green-600 h-1.5 rounded-full"
-              style={{ width: `${typeof value === 'number' ? value * 100 : 0}%` }}
+              style={{ width: `${typeof value === 'number' ? Math.min(value * 100, 100) : 0}%` }}
             ></div>
           </div>
         </div>
@@ -191,7 +232,23 @@ export const AssociationRules = () => {
         </div>
       ),
     },
+    {
+      key: 'support',
+      title: 'Support',
+      sortable: true,
+      render: (value) => (
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          {(value * 100).toFixed(2)}%
+        </div>
+      ),
+    },
   ];
+
+  // Data quality warning
+  const showDataQualityWarning = dataSummary && (
+    dataSummary.total_transactions < 1000 || 
+    dataSummary.total_products < 50
+  );
 
   return (
     <div className="space-y-6">
@@ -200,9 +257,34 @@ export const AssociationRules = () => {
           Association Rules
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Discover product relationships using Market Basket Analysis
+          Discover product relationships using Market Basket Analysis (Actual Data Only)
         </p>
       </div>
+
+      {/* Data Quality Warning */}
+      {showDataQualityWarning && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <div className="flex">
+            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                Limited Data for Association Rules
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-400">
+                <p>
+                  Your dataset has {dataSummary.total_transactions} transactions and {dataSummary.total_products} products.
+                  Association rules work best with:
+                </p>
+                <ul className="list-disc pl-5 mt-1">
+                  <li>1000+ transactions</li>
+                  <li>50+ unique products</li>
+                  <li>Multiple products per transaction</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <FilterPanel onFilterChange={setFilters} loading={loading} />
 
@@ -261,10 +343,10 @@ export const AssociationRules = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Performance
+                  Min Support
                 </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white capitalize">
-                  {stats.performance || 'fast'}
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {(filters.min_support * 100).toFixed(2)}%
                 </p>
               </div>
             </div>
@@ -295,40 +377,118 @@ export const AssociationRules = () => {
             Product Association Rules
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Showing rules with support ≥ {(filters.min_support * 100).toFixed(1)}% and confidence ≥ {(filters.min_confidence * 100).toFixed(0)}%
+            Showing rules with support ≥ {(filters.min_support * 100).toFixed(2)}% and confidence ≥ {(filters.min_confidence * 100).toFixed(0)}%
             {filters.sample_size && ` (Sample: ${filters.sample_size.toLocaleString()} transactions)`}
+            <span className="ml-2 text-xs text-gray-500">
+              Total dataset: {dataSummary?.total_transactions?.toLocaleString() || 'N/A'} transactions
+            </span>
           </p>
         </div>
 
         {loading ? (
           <LoadingSpinner />
+        ) : error ? (
+          <div className="text-center py-12">
+            <div className="text-red-400 dark:text-red-500 mb-4">
+              <AlertCircle className="h-16 w-16 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              {error.message}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              {error.details}
+            </p>
+            <div className="flex justify-center space-x-4">
+              <button 
+                onClick={handleRetry}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Try Lower Thresholds
+              </button>
+              <button 
+                onClick={handleResetFilters}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
         ) : rules.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-400 dark:text-gray-500 mb-4">
-              <Link2 className="h-12 w-12 mx-auto" />
+              <Link2 className="h-16 w-16 mx-auto" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No association rules found
             </h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              Try adjusting your filter settings to find more rules
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              The algorithm couldn't find any significant product associations with current settings.
+              This could mean:
             </p>
-            <button 
-              onClick={fetchAssociationRules}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Retry with Sample Data
-            </button>
+            <ul className="text-sm text-gray-600 dark:text-gray-400 text-left max-w-md mx-auto mb-6">
+              <li className="mb-2">• Your dataset might not have enough co-purchasing patterns</li>
+              <li className="mb-2">• Support/confidence thresholds might be too high</li>
+              <li className="mb-2">• Most transactions might contain single items only</li>
+              <li>• Try lowering the minimum support and confidence values</li>
+            </ul>
+            <div className="flex justify-center space-x-4">
+              <button 
+                onClick={handleRetry}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Try Lower Thresholds (0.1% support, 10% confidence)
+              </button>
+              <button 
+                onClick={() => fetchAssociationRules()}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Retry with Current Settings
+              </button>
+            </div>
           </div>
         ) : (
-          <DataTable
-            columns={columns}
-            data={rules}
-            itemsPerPage={10}
-            onRowClick={(rule) => console.log('Rule selected:', rule)}
-          />
+          <>
+            <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              Found {rules.length} association rules. Lift &gt; 1 indicates positive association.
+            </div>
+            <DataTable
+              columns={columns}
+              data={rules}
+              itemsPerPage={10}
+              onRowClick={(rule) => console.log('Rule selected:', rule)}
+            />
+          </>
         )}
       </div>
+
+      {/* Debug Info (for development only) */}
+      {process.env.NODE_ENV === 'development' && dataSummary && (
+        <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Dataset Info (Debug):</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Transactions:</span>{' '}
+              <span className="font-medium">{dataSummary.total_transactions?.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Products:</span>{' '}
+              <span className="font-medium">{dataSummary.total_products?.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Avg Items/Transaction:</span>{' '}
+              <span className="font-medium">
+                {dataSummary.total_records && dataSummary.total_transactions 
+                  ? (dataSummary.total_records / dataSummary.total_transactions).toFixed(2)
+                  : 'N/A'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Date Range:</span>{' '}
+              <span className="font-medium">{dataSummary.date_range?.time_period || 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
