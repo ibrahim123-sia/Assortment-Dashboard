@@ -13,6 +13,9 @@ export const NetworkView = () => {
     country: 'all',
     year: 'all',
     month: 'all',
+    sample_size: 10000, // Added sample size
+    max_items: 2, // Limit items per itemset
+    limit: 30, // Limit itemsets
   });
 
   useEffect(() => {
@@ -26,27 +29,12 @@ export const NetworkView = () => {
         params: filters,
       });
 
-      if (response.data.success && response.data.network_data) {
-        // Transform data for network graph
-        const { nodes, links } = response.data.network_data;
+      if (response.data.success && response.data.network) {
+        const { nodes, links } = response.data.network;
         
-        // Create unique nodes with proper formatting
-        const uniqueNodes = Array.from(new Set(nodes)).map((node, index) => ({
-          id: node,
-          group: 1,
-        }));
-
-        // Create links with source and target as objects
-        const formattedLinks = links.map((link, index) => ({
-          id: `link-${index}`,
-          source: link.source,
-          target: link.target,
-          value: link.value,
-        }));
-
         setGraphData({
-          nodes: uniqueNodes,
-          links: formattedLinks,
+          nodes: nodes.slice(0, 50), // Limit nodes for performance
+          links: links.slice(0, 100), // Limit links for performance
         });
       }
     } catch (error) {
@@ -127,8 +115,7 @@ export const NetworkView = () => {
             Product Relationship Network
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Interactive visualization of frequently co-purchased products. 
-            Click and drag to explore connections.
+            Showing up to 50 products and 100 connections for optimal performance
           </p>
         </div>
         <NetworkGraph
@@ -138,80 +125,35 @@ export const NetworkView = () => {
         />
       </div>
 
-      {/* Instructions & Tips */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-            How to Use This View
-          </h4>
-          <ul className="space-y-3">
-            <li className="flex items-start">
-              <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mt-0.5">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">1</span>
-              </div>
-              <span className="ml-3 text-gray-700 dark:text-gray-300">
-                <strong>Hover over nodes</strong> to highlight connected products
-              </span>
-            </li>
-            <li className="flex items-start">
-              <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mt-0.5">
-                <span className="text-xs font-bold text-green-600 dark:text-green-400">2</span>
-              </div>
-              <span className="ml-3 text-gray-700 dark:text-gray-300">
-                <strong>Click and drag</strong> to reposition nodes
-              </span>
-            </li>
-            <li className="flex items-start">
-              <div className="flex-shrink-0 h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center mt=0.5">
-                <span className="text-xs font-bold text-purple-600 dark:text-purple-400">3</span>
-              </div>
-              <span className="ml-3 text-gray-700 dark:text-gray-300">
-                <strong>Use zoom controls</strong> to focus on specific areas
-              </span>
-            </li>
-            <li className="flex items-start">
-              <div className="flex-shrink-0 h-5 w-5 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center mt-0.5">
-                <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400">4</span>
-              </div>
-              <span className="ml-3 text-gray-700 dark:text-gray-300">
-                <strong>Adjust filters</strong> to see different product relationships
-              </span>
-            </li>
-          </ul>
-        </div>
-
-        <div className="card">
-          <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-            Key Insights
-          </h4>
-          <div className="space-y-4">
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white mb-1">
-                Densely Connected Clusters
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Groups of products that are frequently purchased together. 
-                These represent potential bundle opportunities.
-              </p>
+      {/* Performance Note */}
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+        <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
+          Performance Optimization
+        </h4>
+        <div className="space-y-3">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mt-0.5">
+              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">i</span>
             </div>
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white mb-1">
-                Central Products
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Products with many connections are key drivers of 
-                cross-selling opportunities.
-              </p>
+            <span className="ml-3 text-gray-700 dark:text-gray-300">
+              Network view limited to 50 nodes and 100 links for optimal performance
+            </span>
+          </div>
+          <div className="flex items-start">
+            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mt-0.5">
+              <span className="text-xs font-bold text-green-600 dark:text-green-400">i</span>
             </div>
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white mb-1">
-                Isolated Products
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Products with few connections may need targeted 
-                marketing to increase cross-sales.
-              </p>
+            <span className="ml-3 text-gray-700 dark:text-gray-300">
+              Using {filters.sample_size?.toLocaleString() || '10,000'} sample transactions
+            </span>
+          </div>
+          <div className="flex items-start">
+            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center mt-0.5">
+              <span className="text-xs font-bold text-purple-600 dark:text-purple-400">i</span>
             </div>
+            <span className="ml-3 text-gray-700 dark:text-gray-300">
+              Adjust sample size in filters for different detail levels
+            </span>
           </div>
         </div>
       </div>

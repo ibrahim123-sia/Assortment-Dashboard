@@ -48,24 +48,18 @@ export const DataSummary = () => {
   }
 
   const dataQualityItems = [
-    { label: 'Total Records', value: summary.data_quality.total_records?.toLocaleString() },
-    { label: 'Null Customer IDs', value: summary.data_quality.null_customers?.toLocaleString() },
-    { label: 'Null Descriptions', value: summary.data_quality.null_descriptions?.toLocaleString() },
-    { label: 'Data Completeness', value: `${summary.data_quality.data_completeness || '0'}%` },
+    { label: 'Total Records', value: summary.data_quality?.total_records?.toLocaleString() || '0' },
+    { label: 'Data Completeness', value: `${summary.data_quality?.data_completeness || '0'}%` },
   ];
 
   const businessMetrics = [
-    { label: 'Avg Items per Transaction', value: summary.business_metrics?.avg_items_per_transaction?.toFixed(2) },
-    { label: 'Avg Price per Item', value: `$${summary.business_metrics?.avg_price_per_item?.toFixed(2)}` },
-    { label: 'Revenue per Customer', value: `$${summary.business_metrics?.revenue_per_customer?.toFixed(2)}` },
-    { label: 'Repeat Customer Rate', value: `${summary.business_metrics?.repeat_customer_rate?.toFixed(1)}%` },
+    { label: 'Avg Transaction Value', value: `$${summary.avg_transaction_value?.toFixed(2) || '0.00'}` },
+    { label: 'Total Countries', value: summary.total_countries || '0' },
   ];
 
   const dateRangeItems = [
-    { label: 'Min Year', value: summary.date_range.min_year },
-    { label: 'Max Year', value: summary.date_range.max_year },
-    { label: 'Total Months', value: summary.date_range.total_months },
-    { label: 'Time Period', value: summary.date_range.time_period },
+    { label: 'Time Period', value: summary.date_range?.time_period || 'N/A' },
+    { label: 'Data Status', value: 'Optimized' },
   ];
 
   return (
@@ -246,7 +240,7 @@ export const DataSummary = () => {
                     r="56"
                     cx="64"
                     cy="64"
-                    strokeDasharray={`${summary.data_quality?.data_completeness || 0 * 3.52} 352`}
+                    strokeDasharray={`${(summary.data_quality?.data_completeness || 0) * 3.52} 352`}
                     strokeDashoffset="0"
                     transform="rotate(-90 64 64)"
                   />
@@ -265,20 +259,18 @@ export const DataSummary = () => {
         </div>
       </div>
 
-      {/* Recommendations */}
+      {/* Performance Note */}
       <div className="card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Recommendations
+          Performance Optimizations
         </h3>
         <div className="space-y-3">
           <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">!</span>
+            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center mt-0.5">
+              <span className="text-xs font-bold text-green-600 dark:text-green-400">✓</span>
             </div>
             <span className="ml-3 text-gray-700 dark:text-gray-300">
-              {summary.data_quality?.null_customers > 100 ? 
-                `Consider cleaning up ${summary.data_quality.null_customers} records with missing customer IDs for better analysis.` :
-                'Customer ID data is well-maintained.'}
+              Data sampling enabled (max 20,000 records per query)
             </span>
           </div>
           <div className="flex items-start">
@@ -286,9 +278,15 @@ export const DataSummary = () => {
               <span className="text-xs font-bold text-green-600 dark:text-green-400">✓</span>
             </div>
             <span className="ml-3 text-gray-700 dark:text-gray-300">
-              {summary.business_metrics?.repeat_customer_rate > 30 ?
-                'Excellent repeat customer rate indicates strong customer loyalty.' :
-                'Consider implementing loyalty programs to increase repeat customers.'}
+              Response compression and caching enabled
+            </span>
+          </div>
+          <div className="flex items-start">
+            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center mt-0.5">
+              <span className="text-xs font-bold text-green-600 dark:text-green-400">✓</span>
+            </div>
+            <span className="ml-3 text-gray-700 dark:text-gray-300">
+              Pagination and limits applied to all queries
             </span>
           </div>
         </div>

@@ -10,6 +10,8 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
     hour: 'all',
     min_support: 0.02,
     min_confidence: 0.3,
+    sample_size: 10000, // Added sample size
+    limit: 50, // Added limit
   });
 
   const [filterOptions, setFilterOptions] = useState({
@@ -50,6 +52,8 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
       hour: 'all',
       min_support: 0.02,
       min_confidence: 0.3,
+      sample_size: 10000,
+      limit: 50,
     };
     setFilters(resetFilters);
     onFilterChange(resetFilters);
@@ -62,7 +66,7 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
           <div className="flex items-center">
             <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              Filters
+              Performance Filters
             </h3>
           </div>
           <button
@@ -79,6 +83,52 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
       </div>
 
       <div className={`px-4 py-4 space-y-4 ${isOpen ? 'block' : 'hidden'}`}>
+        {/* Performance Settings */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Sample Size: {filters.sample_size?.toLocaleString()}
+            </label>
+            <input
+              type="range"
+              min="1000"
+              max="20000"
+              step="1000"
+              value={filters.sample_size}
+              onChange={(e) => handleFilterChange('sample_size', parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>1k</span>
+              <span>10k</span>
+              <span>20k</span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Lower = Faster, Higher = More detailed
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Results Limit: {filters.limit}
+            </label>
+            <input
+              type="range"
+              min="10"
+              max="100"
+              step="10"
+              value={filters.limit}
+              onChange={(e) => handleFilterChange('limit', parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>10</span>
+              <span>50</span>
+              <span>100</span>
+            </div>
+          </div>
+        </div>
+
         {/* Support & Confidence Sliders */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
