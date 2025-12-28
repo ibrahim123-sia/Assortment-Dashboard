@@ -1,7 +1,6 @@
 """
 Intelligent Product Assortment Dashboard using Market Basket Analysis
-Backend API Implementation - COMPLETELY ACTUAL DATA VERSION
-NO HARDCODED DATA - ALL ENDPOINTS USE ACTUAL DATASET ONLY
+Backend API Implementation - ACTUAL DATA VERSION WITH PRODUCT FILTERS
 """
 
 import pandas as pd
@@ -15,20 +14,11 @@ import os
 import traceback
 from datetime import datetime
 import time
-from functools import lru_cache
 import gzip
 import functools
 from collections import defaultdict
 
 warnings.filterwarnings('ignore')
-
-# ============================================================================
-# PERFORMANCE CONSTANTS
-# ============================================================================
-MAX_SAMPLE_SIZE = 20000
-MAX_RESULTS = 100
-DEFAULT_SAMPLE = 10000
-DEFAULT_LIMIT = 50
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -46,12 +36,6 @@ def cache_response(max_age=300, compress=True):
             return response
         return decorated_function
     return decorator
-
-def safe_sample(df, sample_size, random_state=42):
-    """Safely sample DataFrame"""
-    if len(df) <= sample_size:
-        return df.copy()
-    return df.sample(min(sample_size, len(df)), random_state=random_state)
 
 def extract_datetime_features(df):
     """Extract datetime features from dataset"""
@@ -80,11 +64,7 @@ def extract_datetime_features(df):
     
     # Ensure required columns exist with actual data if possible
     if 'Year' not in df_clean.columns or df_clean['Year'].isna().all():
-        if date_columns:
-            df_clean['Year'] = 2024
-        else:
-            # Try to extract from other columns
-            df_clean['Year'] = 2024
+        df_clean['Year'] = 2024
     
     if 'Month' not in df_clean.columns or df_clean['Month'].isna().all():
         df_clean['Month'] = 1
@@ -101,6 +81,33 @@ def extract_datetime_features(df):
     
     return df_clean
 
+def apply_filters(df, filters):
+    """Apply filters to dataframe"""
+    df_filtered = df.copy()
+    
+    # Apply country filter
+    if 'country' in filters and filters['country'] != 'all':
+        df_filtered = df_filtered[df_filtered['Country'] == filters['country']]
+    
+    # Apply year filter
+    if 'year' in filters and filters['year'] != 'all':
+        df_filtered = df_filtered[df_filtered['Year'] == int(filters['year'])]
+    
+    # Apply month filter
+    if 'month' in filters and filters['month'] != 'all':
+        df_filtered = df_filtered[df_filtered['Month'] == int(filters['month'])]
+    
+    # Apply hour filter
+    if 'hour' in filters and filters['hour'] != 'all':
+        df_filtered = df_filtered[df_filtered['Hour'] == int(filters['hour'])]
+    
+    # Apply product filter
+    if 'product' in filters and filters['product'] != 'all':
+        product = filters['product'].lower()
+        df_filtered = df_filtered[df_filtered['Description'].str.lower().str.contains(product, na=False)]
+    
+    return df_filtered
+
 # ============================================================================
 # INITIALIZE FLASK APP
 # ============================================================================
@@ -111,7 +118,6 @@ CORS(app)
 # DATA LOADING - ACTUAL DATA ONLY
 # ============================================================================
 print("Loading data for Intelligent Product Assortment Dashboard...")
-print("THIS VERSION USES ACTUAL DATA ONLY - NO HARCODED DATA")
 
 # Load actual data
 try:
@@ -130,7 +136,7 @@ try:
         # Clean and prepare data
         df = df.copy()
         
-        # Ensure required columns exist - create from actual data if missing
+        # Ensure required columns exist
         required_columns = ['InvoiceNo', 'Description', 'Quantity', 'UnitPrice', 'CustomerID', 'Country']
         for col in required_columns:
             if col not in df.columns:
@@ -142,27 +148,25 @@ try:
                 elif col == 'CustomerID':
                     df['CustomerID'] = 'Unknown'
                 elif col == 'UnitPrice':
-                    if 'Price' in df.columns:
-                        df['UnitPrice'] = df['Price']
-                    else:
-                        df['UnitPrice'] = 10.0  # Default actual value
+                    df['UnitPrice'] = 10.0
                 elif col == 'Quantity':
-                    df['Quantity'] = 1  # Default actual value
+                    df['Quantity'] = 1
         
-        # Calculate total amount from actual data
+        # Calculate total amount
         df['TotalAmount'] = df['Quantity'] * df['UnitPrice']
         
-        # Extract datetime features from actual data
+        # Extract datetime features
         df = extract_datetime_features(df)
+        
+        # Clean product descriptions
+        df['Description'] = df['Description'].astype(str).str.strip()
         
     else:
         print("❌ ERROR: Data file not found!")
-        print("Please ensure Online_Retail_Cleaned.csv exists in the data folder")
         raise FileNotFoundError("Data file not found at: " + data_path)
         
 except Exception as e:
     print(f"❌ CRITICAL ERROR loading data: {str(e)}")
-    print("Cannot run without actual data.")
     raise
 
 print(f"\n📊 ACTUAL DATA SUMMARY:")
@@ -175,17 +179,15 @@ print(f"Date Range: {df['Year'].min()}-{df['Year'].max()}")
 print(f"Countries: {df['Country'].nunique()}")
 
 # ============================================================================
-# ACTUAL DATA API ENDPOINTS - NO HARDCODED DATA
+# API ENDPOINTS
 # ============================================================================
 
 @app.route('/')
 def home():
     return jsonify({
-        "message": "Intelligent Product Assortment Dashboard API - ACTUAL DATA ONLY",
+        "message": "Intelligent Product Assortment Dashboard API",
         "status": "running",
         "data_size": len(df),
-        "data_source": "Online_Retail_Cleaned.csv",
-        "note": "NO HARDCODED DATA - ALL ENDPOINTS USE ACTUAL DATASET",
         "endpoints": [
             "/api/health",
             "/api/summary",
@@ -205,21 +207,14 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "data_records": len(df),
-        "data_quality": {
-            "has_data": len(df) > 0,
-            "transactions": df['InvoiceNo'].nunique(),
-            "products": df['Description'].nunique(),
-            "customers": df['CustomerID'].nunique()
-        }
+        "data_records": len(df)
     })
 
 @app.route('/api/summary', methods=['GET'])
 @cache_response(max_age=300)
 def get_summary():
-    """Get comprehensive data summary statistics - ACTUAL DATA ONLY"""
+    """Get comprehensive data summary statistics"""
     try:
-        # Calculate all metrics from actual data
         total_revenue = float(df['TotalAmount'].sum())
         total_transactions = int(df['InvoiceNo'].nunique())
         avg_transaction_value = total_revenue / total_transactions if total_transactions > 0 else 0
@@ -235,130 +230,50 @@ def get_summary():
                 "min_year": int(df['Year'].min()),
                 "max_year": int(df['Year'].max()),
                 "time_period": f"{int(df['Year'].min())} - {int(df['Year'].max())}"
-            },
-            "data_quality": {
-                "total_records": len(df),
-                "unique_products": int(df['Description'].nunique()),
-                "unique_customers": int(df['CustomerID'].nunique()),
-                "revenue_per_transaction": avg_transaction_value
             }
         }
         
-        return jsonify({
-            "success": True,
-            "data": summary
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e), "note": "Actual data calculation failed"})
-
-@app.route('/api/lightweight/overview', methods=['GET'])
-@cache_response(max_age=300)
-def get_lightweight_overview():
-    """Lightweight endpoint for dashboard - ACTUAL DATA ONLY"""
-    try:
-        # Get top products from ACTUAL DATA
-        top_products_data = (df.groupby('Description')['TotalAmount']
-                           .sum()
-                           .nlargest(5)
-                           .reset_index()
-                           .rename(columns={'TotalAmount': 'total_revenue'})
-                           .to_dict('records'))
-        
-        # Get summary stats from ACTUAL DATA
-        summary = {
-            "total_transactions": int(df['InvoiceNo'].nunique()),
-            "total_products": int(df['Description'].nunique()),
-            "total_customers": int(df['CustomerID'].nunique()),
-            "total_revenue": float(df['TotalAmount'].sum()),
-            "avg_transaction": float(df.groupby('InvoiceNo')['TotalAmount'].sum().mean())
-        }
-        
-        # Generate actual association rules or return empty
-        try:
-            # Try to generate actual rules
-            sample_size = min(5000, len(df))
-            sampled_df = safe_sample(df, sample_size)
-            
-            if len(sampled_df) >= 100:
-                basket = (sampled_df.groupby(['InvoiceNo', 'Description'])['Quantity']
-                          .sum()
-                          .unstack(fill_value=0)
-                          .reset_index()
-                          .set_index('InvoiceNo'))
-                
-                basket_sets = (basket > 0).astype(int)
-                
-                frequent_itemsets = apriori(basket_sets, 
-                                           min_support=0.02, 
-                                           use_colnames=True,
-                                           max_len=2)
-                
-                if len(frequent_itemsets) > 0:
-                    rules = association_rules(frequent_itemsets, 
-                                             metric="confidence", 
-                                             min_threshold=0.3)
-                    
-                    recent_rules = []
-                    for _, rule in rules.head(3).iterrows():
-                        antecedents = list(rule['antecedents'])
-                        consequents = list(rule['consequents'])
-                        if antecedents and consequents:
-                            recent_rules.append({
-                                "rule": f"{antecedents[0][:30]} → {consequents[0][:30]}",
-                                "confidence": round(float(rule['confidence']), 3),
-                                "lift": round(float(rule['lift']), 3),
-                                "support": round(float(rule['support']), 4)
-                            })
-                else:
-                    recent_rules = []
-            else:
-                recent_rules = []
-        except Exception:
-            recent_rules = []
-        
-        return jsonify({
-            "success": True,
-            "summary": summary,
-            "top_products": top_products_data,
-            "recent_rules": recent_rules,
-            "note": "All data calculated from actual dataset"
-        })
-        
+        return jsonify({"success": True, "data": summary})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/association_rules', methods=['GET'])
 @cache_response(max_age=600)
 def get_association_rules():
-    """Get association rules - ACTUAL DATA ONLY, NO SAMPLE DATA"""
+    """Get association rules with filters"""
     try:
         # Get parameters
         min_support = float(request.args.get('min_support', 0.01))
         min_confidence = float(request.args.get('min_confidence', 0.3))
-        sample_size = min(int(request.args.get('sample_size', DEFAULT_SAMPLE)), MAX_SAMPLE_SIZE)
-        limit = min(int(request.args.get('limit', DEFAULT_LIMIT)), MAX_RESULTS)
-        simple = request.args.get('simple', 'false').lower() == 'true'
+        limit = int(request.args.get('limit', 100))
+        simple = request.args.get('simple', 'true').lower() == 'true'
         
-        # Sample data for performance
-        sampled_df = safe_sample(df, sample_size)
+        # Apply filters
+        filters = {
+            'country': request.args.get('country', 'all'),
+            'year': request.args.get('year', 'all'),
+            'month': request.args.get('month', 'all'),
+            'hour': request.args.get('hour', 'all'),
+            'product': request.args.get('product', 'all')
+        }
         
-        # Check if we have enough data
-        if len(sampled_df) < 100:
+        filtered_df = apply_filters(df, filters)
+        
+        if len(filtered_df) < 50:
             return jsonify({
                 "success": True,
                 "data": [],
                 "metadata": {
                     "total_rules_found": 0,
                     "rules_returned": 0,
-                    "sample_size": len(sampled_df),
-                    "processing_time": 0.1,
-                    "note": "Insufficient data for association rule mining"
+                    "filtered_records": len(filtered_df),
+                    "note": "Insufficient data for association rule mining after filtering"
                 }
             })
         
         try:
-            # Create basket data from ACTUAL DATA
-            basket = (sampled_df.groupby(['InvoiceNo', 'Description'])['Quantity']
+            # Create basket data
+            basket = (filtered_df.groupby(['InvoiceNo', 'Description'])['Quantity']
                       .sum()
                       .unstack(fill_value=0)
                       .reset_index()
@@ -367,7 +282,7 @@ def get_association_rules():
             # Convert to binary
             basket_sets = (basket > 0).astype(int)
             
-            # Generate frequent itemsets from ACTUAL DATA
+            # Generate frequent itemsets
             frequent_itemsets = apriori(basket_sets, 
                                        min_support=min_support, 
                                        use_colnames=True,
@@ -380,18 +295,17 @@ def get_association_rules():
                     "metadata": {
                         "total_rules_found": 0,
                         "rules_returned": 0,
-                        "sample_size": len(sampled_df),
-                        "processing_time": 0.1,
+                        "filtered_records": len(filtered_df),
                         "note": "No frequent itemsets found at current support threshold"
                     }
                 })
             
-            # Generate association rules from ACTUAL DATA
+            # Generate association rules
             rules = association_rules(frequent_itemsets, 
                                      metric="confidence", 
                                      min_threshold=min_confidence)
             
-            # Format rules from ACTUAL DATA
+            # Format rules
             formatted_rules = []
             for _, rule in rules.head(limit).iterrows():
                 antecedents = list(rule['antecedents'])
@@ -402,7 +316,7 @@ def get_association_rules():
                 
                 if simple:
                     formatted_rules.append({
-                        "rule": f"{antecedents[0]} → {consequents[0]}",
+                        "rule": f"{antecedents[0][:50]} → {consequents[0][:50]}",
                         "confidence": round(float(rule['confidence']), 3),
                         "lift": round(float(rule['lift']), 3),
                         "support": round(float(rule['support']), 4)
@@ -413,9 +327,7 @@ def get_association_rules():
                         "consequents": consequents,
                         "support": float(rule['support']),
                         "confidence": float(rule['confidence']),
-                        "lift": float(rule['lift']),
-                        "antecedent_count": len(antecedents),
-                        "consequent_count": len(consequents)
+                        "lift": float(rule['lift'])
                     })
             
             return jsonify({
@@ -424,11 +336,10 @@ def get_association_rules():
                 "metadata": {
                     "total_rules_found": len(rules),
                     "rules_returned": len(formatted_rules),
-                    "sample_size": len(sampled_df),
+                    "filtered_records": len(filtered_df),
                     "min_support": min_support,
                     "min_confidence": min_confidence,
-                    "processing_time": round(time.time() - time.time(), 2),
-                    "note": "Rules generated from actual transaction data"
+                    "filters_applied": filters
                 }
             })
             
@@ -439,37 +350,38 @@ def get_association_rules():
                 "metadata": {
                     "total_rules_found": 0,
                     "rules_returned": 0,
-                    "sample_size": len(sampled_df),
-                    "error": str(algo_error),
-                    "note": "Algorithm failed, returning empty results"
+                    "error": str(algo_error)
                 }
             })
             
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "note": "Actual data processing error"
-        })
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/suggested_bundles', methods=['GET'])
 @cache_response(max_age=600)
 def get_suggested_bundles():
-    """Generate suggested product bundles - ACTUAL DATA ONLY"""
+    """Generate suggested product bundles"""
     try:
         min_confidence = float(request.args.get('min_confidence', 0.3))
-        limit = min(int(request.args.get('limit', 10)), 20)
+        limit = int(request.args.get('limit', 10))
+        
+        # Apply filters
+        filters = {
+            'country': request.args.get('country', 'all'),
+            'year': request.args.get('year', 'all'),
+            'month': request.args.get('month', 'all'),
+            'hour': request.args.get('hour', 'all'),
+            'product': request.args.get('product', 'all')
+        }
+        
+        filtered_df = apply_filters(df, filters)
         
         bundles = []
         
-        # Get frequent itemsets to find actual bundles
-        try:
-            sample_size = min(10000, len(df))
-            sampled_df = safe_sample(df, sample_size)
-            
-            if len(sampled_df) >= 500:
+        if len(filtered_df) >= 100:
+            try:
                 # Create basket data
-                basket = (sampled_df.groupby(['InvoiceNo', 'Description'])['Quantity']
+                basket = (filtered_df.groupby(['InvoiceNo', 'Description'])['Quantity']
                           .sum()
                           .unstack(fill_value=0)
                           .reset_index()
@@ -477,7 +389,7 @@ def get_suggested_bundles():
                 
                 basket_sets = (basket > 0).astype(int)
                 
-                # Find frequent itemsets (potential bundles)
+                # Find frequent itemsets
                 frequent_itemsets = apriori(basket_sets, 
                                            min_support=0.02, 
                                            use_colnames=True,
@@ -485,20 +397,17 @@ def get_suggested_bundles():
                 
                 for idx, itemset in frequent_itemsets.head(limit).iterrows():
                     items = list(itemset['itemsets'])
-                    if len(items) >= 2:  # Only bundles with 2+ items
-                        # Calculate bundle metrics from actual data
-                        bundle_df = df[df['Description'].isin(items)]
+                    if len(items) >= 2:
+                        bundle_df = filtered_df[filtered_df['Description'].isin(items)]
                         
                         if not bundle_df.empty:
-                            # Calculate actual co-occurrence
                             transactions_with_items = bundle_df.groupby('InvoiceNo').filter(
                                 lambda x: len(x['Description'].unique()) >= 2
                             )['InvoiceNo'].nunique()
                             
-                            total_transactions = df['InvoiceNo'].nunique()
+                            total_transactions = filtered_df['InvoiceNo'].nunique()
                             support = transactions_with_items / total_transactions if total_transactions > 0 else 0
                             
-                            # Only include bundles with sufficient confidence
                             if support >= min_confidence:
                                 bundles.append({
                                     "bundle_id": f"B{idx:03d}",
@@ -506,53 +415,18 @@ def get_suggested_bundles():
                                     "product_count": len(items),
                                     "bundle_name": f"Bundle {idx}",
                                     "confidence": round(support, 3),
-                                    "lift": round(1.0 + (support * 2), 2),
                                     "estimated_revenue": float(bundle_df['TotalAmount'].sum()),
                                     "avg_product_price": float(bundle_df['UnitPrice'].mean()) if not bundle_df.empty else 0.0,
                                     "transaction_count": transactions_with_items
                                 })
-        except Exception as e:
-            print(f"Bundle generation error: {e}")
-        
-        # If no bundles found from algorithm, try simple co-purchases
-        if not bundles:
-            # Find products that are frequently bought together
-            product_pairs = {}
-            
-            # Get top products
-            top_products = df['Description'].value_counts().head(20).index.tolist()
-            
-            for i, product1 in enumerate(top_products):
-                for j, product2 in enumerate(top_products[i+1:i+4]):
-                    # Find transactions with both products
-                    trans1 = set(df[df['Description'] == product1]['InvoiceNo'].unique())
-                    trans2 = set(df[df['Description'] == product2]['InvoiceNo'].unique())
-                    common_trans = len(trans1.intersection(trans2))
-                    
-                    if common_trans > 0:
-                        support = common_trans / len(trans1) if len(trans1) > 0 else 0
-                        if support >= min_confidence:
-                            products = [product1, product2]
-                            bundle_df = df[df['Description'].isin(products)]
-                            
-                            bundles.append({
-                                "bundle_id": f"B{i*10+j:03d}",
-                                "products": products,
-                                "product_count": 2,
-                                "bundle_name": f"{product1[:15]} + {product2[:15]}",
-                                "confidence": round(support, 3),
-                                "lift": round(1.0 + support, 2),
-                                "estimated_revenue": float(bundle_df['TotalAmount'].sum()),
-                                "avg_product_price": float(bundle_df['UnitPrice'].mean()) if not bundle_df.empty else 0.0,
-                                "transaction_count": common_trans
-                            })
+            except Exception as e:
+                print(f"Bundle generation error: {e}")
         
         return jsonify({
             "success": True,
             "bundles": bundles[:limit],
             "total_bundles": len(bundles),
-            "message": f"Found {len(bundles)} bundles from actual transaction patterns",
-            "note": "All bundles derived from actual purchase data"
+            "filters_applied": filters
         })
         
     except Exception as e:
@@ -561,35 +435,35 @@ def get_suggested_bundles():
 @app.route('/api/revenue_analysis', methods=['GET'])
 @cache_response(max_age=300)
 def get_revenue_analysis():
-    """Revenue analysis - ACTUAL DATA ONLY"""
+    """Revenue analysis by country"""
     try:
-        limit = min(int(request.args.get('limit', 10)), 20)
+        limit = int(request.args.get('limit', 10))
+        
+        # Apply filters
+        filters = {
+            'country': request.args.get('country', 'all'),
+            'year': request.args.get('year', 'all'),
+            'month': request.args.get('month', 'all'),
+            'hour': request.args.get('hour', 'all'),
+            'product': request.args.get('product', 'all')
+        }
+        
+        filtered_df = apply_filters(df, filters)
         
         revenue_analysis = []
         
-        # Analyze revenue by product category/group
-        # First, let's analyze by country
-        country_revenue = df.groupby('Country').agg({
+        # Analyze revenue by country
+        country_revenue = filtered_df.groupby('Country').agg({
             'TotalAmount': 'sum',
             'InvoiceNo': 'nunique',
             'CustomerID': 'nunique'
         }).nlargest(limit, 'TotalAmount').reset_index()
         
         for idx, row in country_revenue.iterrows():
-            country_df = df[df['Country'] == row['Country']]
+            country_df = filtered_df[filtered_df['Country'] == row['Country']]
             avg_transaction = country_df.groupby('InvoiceNo')['TotalAmount'].sum().mean()
             
-            # Calculate growth potential based on historical data if available
-            if 'Year' in df.columns and df['Year'].nunique() > 1:
-                # Calculate year-over-year growth
-                yearly_revenue = country_df.groupby('Year')['TotalAmount'].sum()
-                if len(yearly_revenue) > 1:
-                    growth_rate = (yearly_revenue.iloc[-1] - yearly_revenue.iloc[-2]) / yearly_revenue.iloc[-2] if yearly_revenue.iloc[-2] > 0 else 0
-                    revenue_potential = float(row['TotalAmount'] * (1 + growth_rate))
-                else:
-                    revenue_potential = float(row['TotalAmount'] * 1.1)  # 10% default growth
-            else:
-                revenue_potential = float(row['TotalAmount'] * 1.1)
+            revenue_potential = float(row['TotalAmount'] * 1.1)  # 10% growth
             
             revenue_analysis.append({
                 "country": row['Country'],
@@ -597,15 +471,14 @@ def get_revenue_analysis():
                 "transaction_count": int(row['InvoiceNo']),
                 "customer_count": int(row['CustomerID']),
                 "avg_transaction_value": float(avg_transaction) if not pd.isna(avg_transaction) else 0.0,
-                "revenue_potential": revenue_potential,
-                "confidence": round(min(0.95, 0.7 + (row['InvoiceNo'] / 1000)), 2)  # Based on transaction volume
+                "revenue_potential": revenue_potential
             })
         
         return jsonify({
             "success": True,
             "revenue_analysis": revenue_analysis,
             "analysis_type": "country_revenue",
-            "note": "All revenue metrics calculated from actual transaction data"
+            "filters_applied": filters
         })
         
     except Exception as e:
@@ -614,16 +487,25 @@ def get_revenue_analysis():
 @app.route('/api/seasonal_data', methods=['GET'])
 @cache_response(max_age=1800)
 def get_seasonal_data():
-    """Seasonal patterns analysis - ACTUAL DATA ONLY"""
+    """Seasonal patterns analysis"""
     try:
-        print("Processing seasonal data from actual dataset...")
+        # Apply filters
+        filters = {
+            'country': request.args.get('country', 'all'),
+            'year': request.args.get('year', 'all'),
+            'month': request.args.get('month', 'all'),
+            'hour': request.args.get('hour', 'all'),
+            'product': request.args.get('product', 'all')
+        }
         
-        # Monthly analysis - ACTUAL DATA
+        filtered_df = apply_filters(df, filters)
+        
+        # Monthly analysis
         monthly_data = []
         month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         
         for i, month in enumerate(month_names, 1):
-            month_df = df[df['Month'] == i]
+            month_df = filtered_df[filtered_df['Month'] == i]
             if not month_df.empty:
                 monthly_data.append({
                     "month": i,
@@ -643,16 +525,16 @@ def get_seasonal_data():
                     "avg_transaction": 0.0
                 })
         
-        # Country analysis - ACTUAL DATA
+        # Country analysis
         country_data = []
-        country_stats = df.groupby('Country').agg({
+        country_stats = filtered_df.groupby('Country').agg({
             'TotalAmount': 'sum',
             'InvoiceNo': 'nunique',
             'CustomerID': 'nunique'
         }).reset_index()
         
         for _, row in country_stats.iterrows():
-            country_df = df[df['Country'] == row['Country']]
+            country_df = filtered_df[filtered_df['Country'] == row['Country']]
             avg_transaction = country_df.groupby('InvoiceNo')['TotalAmount'].sum().mean()
             
             country_data.append({
@@ -665,13 +547,12 @@ def get_seasonal_data():
         
         country_data.sort(key=lambda x: x['revenue'], reverse=True)
         
-        # Hourly analysis - ACTUAL DATA
+        # Hourly analysis
         hourly_data = []
-        hours_in_data = sorted([h for h in df['Hour'].unique() if pd.notna(h)])
-        hours_to_analyze = hours_in_data if len(hours_in_data) > 0 else list(range(24))
+        hours_in_data = sorted([h for h in filtered_df['Hour'].unique() if pd.notna(h)])
         
-        for hour in hours_to_analyze:
-            hour_df = df[df['Hour'] == hour]
+        for hour in hours_in_data:
+            hour_df = filtered_df[filtered_df['Hour'] == hour]
             if not hour_df.empty:
                 hourly_data.append({
                     "hour": int(hour),
@@ -679,23 +560,14 @@ def get_seasonal_data():
                     "transactions": int(hour_df['InvoiceNo'].nunique()),
                     "revenue": float(hour_df['TotalAmount'].sum())
                 })
-            else:
-                hourly_data.append({
-                    "hour": int(hour),
-                    "hour_label": f"{int(hour):02d}:00",
-                    "transactions": 0,
-                    "revenue": 0.0
-                })
         
-        hourly_data.sort(key=lambda x: x['hour'])
-        
-        # Weekday analysis - ACTUAL DATA
+        # Weekday analysis
         weekday_data = []
         weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         weekday_short = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         
         for i, day in enumerate(weekdays):
-            day_df = df[df['Weekday'] == day]
+            day_df = filtered_df[filtered_df['Weekday'] == day]
             if not day_df.empty:
                 weekday_data.append({
                     "weekday": day,
@@ -703,15 +575,8 @@ def get_seasonal_data():
                     "transactions": int(day_df['InvoiceNo'].nunique()),
                     "revenue": float(day_df['TotalAmount'].sum())
                 })
-            else:
-                weekday_data.append({
-                    "weekday": day,
-                    "weekday_short": weekday_short[i],
-                    "transactions": 0,
-                    "revenue": 0.0
-                })
         
-        # Calculate actual insights from data
+        # Calculate insights
         best_month = "N/A"
         peak_hour = "N/A"
         top_country = "N/A"
@@ -745,63 +610,62 @@ def get_seasonal_data():
                 "top_country": top_country,
                 "best_weekday": best_weekday
             },
-            "note": "All seasonal data calculated from actual transactions"
+            "filters_applied": filters
         })
         
     except Exception as e:
-        print(f"❌ Error in seasonal analysis: {str(e)}")
-        traceback.print_exc()
-        return jsonify({
-            "success": False, 
-            "error": str(e),
-            "message": "Failed to process seasonal data from actual dataset"
-        })
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/frequent_itemsets', methods=['GET'])
 @cache_response(max_age=600)
 def get_frequent_itemsets():
-    """Get frequent itemsets for network graph - ACTUAL DATA ONLY"""
+    """Get frequent itemsets for network graph"""
     try:
-        # Get actual top products
-        top_products = df['Description'].value_counts().head(20).index.tolist()
+        # Apply filters
+        filters = {
+            'country': request.args.get('country', 'all'),
+            'year': request.args.get('year', 'all'),
+            'month': request.args.get('month', 'all'),
+            'hour': request.args.get('hour', 'all'),
+            'product': request.args.get('product', 'all')
+        }
+        
+        filtered_df = apply_filters(df, filters)
+        
+        # Get top products
+        top_products = filtered_df['Description'].value_counts().head(20).index.tolist()
         
         nodes = []
         links = []
         
-        # Create nodes from actual products
+        # Create nodes
         for i, product in enumerate(top_products):
-            product_revenue = df[df['Description'] == product]['TotalAmount'].sum()
-            product_transactions = df[df['Description'] == product]['InvoiceNo'].nunique()
+            product_revenue = filtered_df[filtered_df['Description'] == product]['TotalAmount'].sum()
+            product_transactions = filtered_df[filtered_df['Description'] == product]['InvoiceNo'].nunique()
             
-            # Group by transaction frequency quartile
-            if product_transactions > 0:
-                product_group = min(3, (product_transactions // 5) + 1)
-            else:
-                product_group = 1
+            product_group = min(3, (product_transactions // 5) + 1) if product_transactions > 0 else 1
             
             nodes.append({
                 "id": product[:30].replace(" ", "_"),
                 "name": product[:30],
                 "group": product_group,
-                "value": float(product_revenue / 1000),  # Scale down for visualization
+                "value": float(product_revenue / 1000),
                 "transactions": product_transactions,
                 "revenue": float(product_revenue)
             })
         
-        # Create links between products that appear in same transactions
+        # Create links
         for i in range(len(top_products)):
-            for j in range(i+1, min(i+5, len(top_products))):  # Limit connections for performance
+            for j in range(i+1, min(i+5, len(top_products))):
                 product1 = top_products[i]
                 product2 = top_products[j]
                 
-                # Find transactions where both products appear
-                invoices1 = set(df[df['Description'] == product1]['InvoiceNo'].unique())
-                invoices2 = set(df[df['Description'] == product2]['InvoiceNo'].unique())
+                invoices1 = set(filtered_df[filtered_df['Description'] == product1]['InvoiceNo'].unique())
+                invoices2 = set(filtered_df[filtered_df['Description'] == product2]['InvoiceNo'].unique())
                 common_invoices = invoices1.intersection(invoices2)
                 
                 if common_invoices:
-                    # Calculate link strength based on co-occurrence
-                    link_strength = len(common_invoices) / min(len(invoices1), len(invoices2))
+                    link_strength = len(common_invoices) / min(len(invoices1), len(invoices2)) if min(len(invoices1), len(invoices2)) > 0 else 0
                     
                     links.append({
                         "source": product1[:30].replace(" ", "_"),
@@ -812,15 +676,11 @@ def get_frequent_itemsets():
         
         return jsonify({
             "success": True,
-            "network": {
-                "nodes": nodes,
-                "links": links
-            },
+            "network": {"nodes": nodes, "links": links},
             "metadata": {
                 "nodes_count": len(nodes),
                 "links_count": len(links),
-                "data_source": "actual_transaction_co-occurrence",
-                "products_analyzed": len(top_products)
+                "filters_applied": filters
             }
         })
         
@@ -830,12 +690,23 @@ def get_frequent_itemsets():
 @app.route('/api/top_products', methods=['GET'])
 @cache_response(max_age=300)
 def get_top_products():
-    """Get top products - ACTUAL DATA ONLY"""
+    """Get top products"""
     try:
-        limit = min(int(request.args.get('limit', 20)), 100)
+        limit = int(request.args.get('limit', 20))
         
-        # Calculate top products by revenue from ACTUAL DATA
-        top_products_df = (df.groupby('Description')['TotalAmount']
+        # Apply filters
+        filters = {
+            'country': request.args.get('country', 'all'),
+            'year': request.args.get('year', 'all'),
+            'month': request.args.get('month', 'all'),
+            'hour': request.args.get('hour', 'all'),
+            'product': request.args.get('product', 'all')
+        }
+        
+        filtered_df = apply_filters(df, filters)
+        
+        # Calculate top products
+        top_products_df = (filtered_df.groupby('Description')['TotalAmount']
                           .agg(['sum', 'count', 'mean'])
                           .rename(columns={'sum': 'total_revenue', 'count': 'transactions', 'mean': 'avg_price'})
                           .sort_values('total_revenue', ascending=False)
@@ -844,8 +715,7 @@ def get_top_products():
         
         products_list = []
         for idx, row in top_products_df.iterrows():
-            # Get additional metrics for each product
-            product_df = df[df['Description'] == row['Description']]
+            product_df = filtered_df[filtered_df['Description'] == row['Description']]
             unique_customers = product_df['CustomerID'].nunique()
             avg_quantity = product_df['Quantity'].mean()
             
@@ -862,8 +732,7 @@ def get_top_products():
         return jsonify({
             "success": True,
             "products": products_list,
-            "total_products": len(top_products_df),
-            "note": "All product metrics calculated from actual sales data"
+            "filters_applied": filters
         })
         
     except Exception as e:
@@ -872,32 +741,32 @@ def get_top_products():
 @app.route('/api/filters', methods=['GET'])
 @cache_response(max_age=3600)
 def get_filters():
-    """Get available filters - ACTUAL DATA ONLY"""
+    """Get available filters"""
     try:
-        countries = [c for c in df['Country'].unique().tolist() if isinstance(c, str)][:30]
+        countries = [str(c) for c in df['Country'].unique().tolist() if pd.notna(c)][:30]
         years = [int(y) for y in sorted(df['Year'].unique().tolist()) if pd.notna(y)]
         
-        # Get actual months present in data
+        # Get months present in data
         months_present = [int(m) for m in sorted(df['Month'].unique().tolist()) if pd.notna(m) and 1 <= m <= 12]
         month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         month_filters = [{"value": i, "name": month_names[i-1]} for i in months_present if 1 <= i <= 12]
         
-        # Get actual hours present in data
+        # Get hours present in data
         hours_present = [int(h) for h in sorted(df['Hour'].unique().tolist()) if pd.notna(h) and 0 <= h <= 23]
+        
+        # Get top products for product filter
+        top_products = df['Description'].value_counts().head(50).index.tolist()
         
         filters = {
             "countries": countries,
             "years": years,
             "months": month_filters,
             "hours": hours_present,
+            "products": top_products,
             "weekdays": ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         }
         
-        return jsonify({
-            "success": True,
-            "filters": filters,
-            "note": "All filters derived from actual data ranges"
-        })
+        return jsonify({"success": True, "filters": filters})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -908,29 +777,21 @@ def get_filters():
 if __name__ == '__main__':
     print("\n" + "="*60)
     print("INTELLIGENT PRODUCT ASSORTMENT DASHBOARD")
-    print("ACTUAL DATA ONLY VERSION - NO HARDCODED DATA")
     print("="*60)
     print(f"📊 Total Records: {len(df):,}")
     print(f"🛒 Total Transactions: {df['InvoiceNo'].nunique():,}")
     print(f"📦 Total Products: {df['Description'].nunique():,}")
-    print(f"👥 Total Customers: {df['CustomerID'].nunique():,}")
     print(f"💰 Total Revenue: ${df['TotalAmount'].sum():,.2f}")
-    print(f"🌍 Countries: {df['Country'].nunique()}")
-    print(f"📅 Months in Data: {sorted(df['Month'].dropna().unique())}")
-    print(f"⏰ Hours in Data: {sorted(df['Hour'].dropna().unique())}")
-    print("\n🚀 AVAILABLE ENDPOINTS (ALL USING ACTUAL DATA):")
+    print("\n🚀 AVAILABLE ENDPOINTS:")
     print("   • /api/health - Health check")
     print("   • /api/summary - Data summary")
-    print("   • /api/association_rules - Association rules (actual algorithm)")
-    print("   • /api/suggested_bundles - Product bundles (actual patterns)")
-    print("   • /api/revenue_analysis - Revenue analysis (actual metrics)")
-    print("   • /api/seasonal_data - Seasonal patterns (actual dates)")
-    print("   • /api/frequent_itemsets - Network graph (actual co-occurrence)")
-    print("   • /api/top_products - Top products (actual sales)")
-    print("   • /api/filters - Available filters (actual data ranges)")
-    print("\n⚠ IMPORTANT: This version uses ACTUAL DATA ONLY.")
-    print("   If dataset is small, some endpoints may return empty results.")
-    print("   NO HARDCODED DATA WILL BE RETURNED.")
+    print("   • /api/association_rules - Association rules")
+    print("   • /api/suggested_bundles - Product bundles")
+    print("   • /api/revenue_analysis - Revenue analysis")
+    print("   • /api/seasonal_data - Seasonal patterns")
+    print("   • /api/frequent_itemsets - Network graph")
+    print("   • /api/top_products - Top products")
+    print("   • /api/filters - Available filters")
     print("\n🔧 Press Ctrl+C to stop")
     print("="*60)
     
