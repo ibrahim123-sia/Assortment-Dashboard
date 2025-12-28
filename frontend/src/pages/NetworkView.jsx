@@ -13,9 +13,8 @@ export const NetworkView = () => {
     country: 'all',
     year: 'all',
     month: 'all',
-    sample_size: 10000, // Added sample size
-    max_items: 2, // Limit items per itemset
-    limit: 30, // Limit itemsets
+    hour: 'all',
+    product: 'all'
   });
 
   useEffect(() => {
@@ -33,8 +32,8 @@ export const NetworkView = () => {
         const { nodes, links } = response.data.network;
         
         setGraphData({
-          nodes: nodes.slice(0, 50), // Limit nodes for performance
-          links: links.slice(0, 100), // Limit links for performance
+          nodes: nodes.slice(0, 50),
+          links: links.slice(0, 100),
         });
       }
     } catch (error) {
@@ -115,7 +114,7 @@ export const NetworkView = () => {
             Product Relationship Network
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Showing up to 50 products and 100 connections for optimal performance
+            Nodes represent products, edges represent co-purchase frequency
           </p>
         </div>
         <NetworkGraph
@@ -123,39 +122,6 @@ export const NetworkView = () => {
           loading={loading}
           height={600}
         />
-      </div>
-
-      {/* Performance Note */}
-      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
-        <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-          Performance Optimization
-        </h4>
-        <div className="space-y-3">
-          <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">i</span>
-            </div>
-            <span className="ml-3 text-gray-700 dark:text-gray-300">
-              Network view limited to 50 nodes and 100 links for optimal performance
-            </span>
-          </div>
-          <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-green-600 dark:text-green-400">i</span>
-            </div>
-            <span className="ml-3 text-gray-700 dark:text-gray-300">
-              Using {filters.sample_size?.toLocaleString() || '10,000'} sample transactions
-            </span>
-          </div>
-          <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-purple-600 dark:text-purple-400">i</span>
-            </div>
-            <span className="ml-3 text-gray-700 dark:text-gray-300">
-              Adjust sample size in filters for different detail levels
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   );

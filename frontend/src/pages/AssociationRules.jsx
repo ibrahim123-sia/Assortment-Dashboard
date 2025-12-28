@@ -12,13 +12,13 @@ export const AssociationRules = () => {
   const [error, setError] = useState(null);
   const [dataSummary, setDataSummary] = useState(null);
   const [filters, setFilters] = useState({
-    min_support: 0.005,  // Lowered for better results
-    min_confidence: 0.2,  // Lowered for better results
+    min_support: 0.01,
+    min_confidence: 0.3,
     country: 'all',
     year: 'all',
     month: 'all',
-    sample_size: 10000,
-    limit: 50,
+    hour: 'all',
+    product: 'all',
     simple: true,
   });
 
@@ -39,7 +39,6 @@ export const AssociationRules = () => {
       const response = await axios.get('/api/summary');
       if (response.data.success) {
         setDataSummary(response.data.data);
-        console.log('Data summary loaded:', response.data.data);
       }
     } catch (error) {
       console.error('Error fetching data summary:', error);
@@ -54,19 +53,15 @@ export const AssociationRules = () => {
       const response = await axios.get('/api/association_rules', {
         params: {
           ...filters,
-          simple: filters.simple
+          limit: 100
         },
       });
-
-      console.log('API Response:', response.data);
 
       if (response.data.success) {
         setRules(response.data.data || []);
         setStats(response.data.metadata || {
           total_rules_found: response.data.data?.length || 0,
-          sample_size: filters.sample_size,
-          processing_time: 0.5,
-          performance: 'fast'
+          filtered_records: 0,
         });
         
         if (!response.data.data || response.data.data.length === 0) {
@@ -101,21 +96,21 @@ export const AssociationRules = () => {
   const handleRetry = () => {
     setFilters({
       ...filters,
-      min_support: 0.001,  // Even lower threshold
-      min_confidence: 0.1,  // Even lower threshold
-      sample_size: Math.min(20000, dataSummary?.total_transactions || 10000)
+      min_support: 0.005,
+      min_confidence: 0.2,
     });
+    fetchAssociationRules();
   };
 
   const handleResetFilters = () => {
     setFilters({
-      min_support: 0.005,
-      min_confidence: 0.2,
+      min_support: 0.01,
+      min_confidence: 0.3,
       country: 'all',
       year: 'all',
       month: 'all',
-      sample_size: 10000,
-      limit: 50,
+      hour: 'all',
+      product: 'all',
       simple: true,
     });
   };
@@ -257,7 +252,7 @@ export const AssociationRules = () => {
           Association Rules
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Discover product relationships using Market Basket Analysis (Actual Data Only)
+          Discover product relationships using Market Basket Analysis
         </p>
       </div>
 
@@ -290,7 +285,7 @@ export const AssociationRules = () => {
 
       {/* Stats Overview */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card">
             <div className="flex items-center">
               <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
@@ -313,10 +308,10 @@ export const AssociationRules = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Sample Size
+                  Min Support
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.sample_size?.toLocaleString() || '10,000'}
+                  {(filters.min_support * 100).toFixed(2)}%
                 </p>
               </div>
             </div>
@@ -328,25 +323,10 @@ export const AssociationRules = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Processing Time
+                  Min Confidence
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.processing_time?.toFixed(1) || '0.2'}s
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="flex items-center">
-              <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
-                <TrendingUp className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Min Support
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {(filters.min_support * 100).toFixed(2)}%
+                  {(filters.min_confidence * 100).toFixed(0)}%
                 </p>
               </div>
             </div>
@@ -378,10 +358,6 @@ export const AssociationRules = () => {
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Showing rules with support ≥ {(filters.min_support * 100).toFixed(2)}% and confidence ≥ {(filters.min_confidence * 100).toFixed(0)}%
-            {filters.sample_size && ` (Sample: ${filters.sample_size.toLocaleString()} transactions)`}
-            <span className="ml-2 text-xs text-gray-500">
-              Total dataset: {dataSummary?.total_transactions?.toLocaleString() || 'N/A'} transactions
-            </span>
           </p>
         </div>
 
@@ -423,26 +399,19 @@ export const AssociationRules = () => {
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               The algorithm couldn't find any significant product associations with current settings.
-              This could mean:
             </p>
-            <ul className="text-sm text-gray-600 dark:text-gray-400 text-left max-w-md mx-auto mb-6">
-              <li className="mb-2">• Your dataset might not have enough co-purchasing patterns</li>
-              <li className="mb-2">• Support/confidence thresholds might be too high</li>
-              <li className="mb-2">• Most transactions might contain single items only</li>
-              <li>• Try lowering the minimum support and confidence values</li>
-            </ul>
             <div className="flex justify-center space-x-4">
               <button 
                 onClick={handleRetry}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Try Lower Thresholds (0.1% support, 10% confidence)
+                Try Lower Thresholds
               </button>
               <button 
-                onClick={() => fetchAssociationRules()}
+                onClick={fetchAssociationRules}
                 className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
               >
-                Retry with Current Settings
+                Retry
               </button>
             </div>
           </div>
@@ -460,35 +429,6 @@ export const AssociationRules = () => {
           </>
         )}
       </div>
-
-      {/* Debug Info (for development only) */}
-      {process.env.NODE_ENV === 'development' && dataSummary && (
-        <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Dataset Info (Debug):</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-            <div>
-              <span className="text-gray-600 dark:text-gray-400">Transactions:</span>{' '}
-              <span className="font-medium">{dataSummary.total_transactions?.toLocaleString()}</span>
-            </div>
-            <div>
-              <span className="text-gray-600 dark:text-gray-400">Products:</span>{' '}
-              <span className="font-medium">{dataSummary.total_products?.toLocaleString()}</span>
-            </div>
-            <div>
-              <span className="text-gray-600 dark:text-gray-400">Avg Items/Transaction:</span>{' '}
-              <span className="font-medium">
-                {dataSummary.total_records && dataSummary.total_transactions 
-                  ? (dataSummary.total_records / dataSummary.total_transactions).toFixed(2)
-                  : 'N/A'}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-600 dark:text-gray-400">Date Range:</span>{' '}
-              <span className="font-medium">{dataSummary.date_range?.time_period || 'N/A'}</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
