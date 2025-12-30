@@ -3,13 +3,13 @@ import axios from 'axios';
 import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Package, TrendingUp, DollarSign, Tag } from 'lucide-react';
+import { Package, TrendingUp, DollarSign, Tag, RefreshCw, AlertCircle } from 'lucide-react';
 
 export const ProductBundles = () => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [bundles, setBundles] = useState([]);
   const [filters, setFilters] = useState({
-    min_confidence: 0.5,
+    min_confidence: 0.3,
     country: 'all',
     year: 'all',
     month: 'all',
@@ -24,12 +24,19 @@ export const ProductBundles = () => {
   const fetchBundles = async () => {
     setLoading(true);
     try {
+      console.log('Fetching bundles with filters:', filters);
+      
       const response = await axios.get('/api/suggested_bundles', {
         params: filters,
       });
 
+      console.log('Bundles API Response:', response.data);
+
       if (response.data.success) {
         setBundles(response.data.bundles || []);
+      } else {
+        console.error('API returned error:', response.data.error);
+        setBundles([]);
       }
     } catch (error) {
       console.error('Error fetching bundles:', error);
@@ -37,6 +44,21 @@ export const ProductBundles = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = () => {
+    fetchBundles();
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      min_confidence: 0.3,
+      country: 'all',
+      year: 'all',
+      month: 'all',
+      hour: 'all',
+      product: 'all'
+    });
   };
 
   const columns = [
@@ -58,8 +80,8 @@ export const ProductBundles = () => {
             {value}
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            {row.products.slice(0, 2).join(', ')}
-            {row.products.length > 2 && ` + ${row.products.length - 2} more`}
+            {row.products?.slice(0, 2).map(p => p.substring(0, 20)).join(', ')}
+            {row.products?.length > 2 && ` + ${row.products.length - 2} more`}
           </div>
         </div>
       ),
@@ -87,7 +109,7 @@ export const ProductBundles = () => {
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
             <div
               className="bg-green-600 h-1.5 rounded-full"
-              style={{ width: `${value * 100}%` }}
+              style={{ width: `${Math.min(value * 100, 100)}%` }}
             ></div>
           </div>
         </div>
@@ -108,7 +130,25 @@ export const ProductBundles = () => {
           <div className="text-xs text-gray-500 dark:text-gray-400">per bundle</div>
         </div>
       ),
-    }
+    },
+    {
+      key: 'lift',
+      title: 'Lift',
+      sortable: true,
+      render: (value) => (
+        <div
+          className={`font-bold text-center ${
+            value > 1.5
+              ? 'text-green-600'
+              : value > 1
+              ? 'text-yellow-600'
+              : 'text-red-600'
+          }`}
+        >
+          {typeof value === 'number' ? value.toFixed(2) : '0.00'}
+        </div>
+      ),
+    },
   ];
 
   // Calculate stats
@@ -131,11 +171,29 @@ export const ProductBundles = () => {
         </p>
       </div>
 
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={() => setFilters({...filters, min_confidence: 0.2})}
+          className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Package className="h-4 w-4 mr-2" />
+          Lower Confidence (20%)
+        </button>
+        <button
+          onClick={handleResetFilters}
+          className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Reset Filters
+        </button>
+      </div>
+
       <FilterPanel onFilterChange={setFilters} loading={loading} />
 
       {/* Bundle Stats */}
       {!loading && bundles.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-center">
               <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
@@ -169,7 +227,22 @@ export const ProductBundles = () => {
           <div className="card">
             <div className="flex items-center">
               <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                <DollarSign className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Total Est. Revenue
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  ${totalRevenue.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                <TrendingUp className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -191,12 +264,12 @@ export const ProductBundles = () => {
             Recommended Product Bundles
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Suggested bundles based on association rules with confidence ≥ {(filters.min_confidence * 100).toFixed(0)}%
+            Suggested bundles based on co-purchase patterns with confidence ≥ {(filters.min_confidence * 100).toFixed(0)}%
           </p>
         </div>
 
         {loading ? (
-          <LoadingSpinner />
+          <LoadingSpinner text="Finding product bundles..." />
         ) : bundles.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-400 dark:text-gray-500 mb-4">
@@ -205,25 +278,85 @@ export const ProductBundles = () => {
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No bundles found
             </h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              Try adjusting the confidence threshold or filters
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              This could be because:
             </p>
-            <button 
-              onClick={fetchBundles}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Retry
-            </button>
+            <ul className="text-sm text-gray-600 dark:text-gray-400 text-left max-w-md mx-auto mb-6 space-y-2">
+              <li className="flex items-start">
+                <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-yellow-500" />
+                <span>Confidence threshold is too high (try 20% instead of 30%)</span>
+              </li>
+              <li className="flex items-start">
+                <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-yellow-500" />
+                <span>Filters are too restrictive (try removing filters)</span>
+              </li>
+              <li className="flex items-start">
+                <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-yellow-500" />
+                <span>Dataset has few co-purchased products</span>
+              </li>
+            </ul>
+            <div className="flex justify-center space-x-4">
+              <button 
+                onClick={() => setFilters({...filters, min_confidence: 0.2})}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Try Lower Confidence (20%)
+              </button>
+              <button 
+                onClick={handleRetry}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <RefreshCw className="inline-block h-4 w-4 mr-1" />
+                Retry
+              </button>
+            </div>
           </div>
         ) : (
-          <DataTable
-            columns={columns}
-            data={bundles}
-            itemsPerPage={10}
-            onRowClick={(bundle) => console.log('Bundle selected:', bundle)}
-          />
+          <>
+            <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              Found {bundles.length} product bundles. Confidence shows how often products are bought together.
+            </div>
+            <DataTable
+              columns={columns}
+              data={bundles}
+              itemsPerPage={10}
+              onRowClick={(bundle) => console.log('Bundle selected:', bundle)}
+            />
+          </>
         )}
       </div>
+
+      {/* Action Section */}
+      {!loading && bundles.length > 0 && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Ready to implement these bundles?
+              </h4>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                These bundles are based on actual customer purchase patterns
+              </p>
+            </div>
+            <div className="flex space-x-3 mt-4 md:mt-0">
+              <button 
+                onClick={() => alert('Export functionality would be implemented here')}
+                className="btn-secondary flex items-center"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Export as CSV
+              </button>
+              <button 
+                onClick={() => alert('Promotion creation would be implemented here')}
+                className="btn-primary flex items-center"
+              >
+                <DollarSign className="h-4 w-4 mr-2" />
+                Create Promotion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

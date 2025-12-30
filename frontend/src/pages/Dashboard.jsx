@@ -19,8 +19,11 @@ export const Dashboard = () => {
   const [topProducts, setTopProducts] = useState([]);
   const [recentRules, setRecentRules] = useState([]);
   const [filters, setFilters] = useState({
-    sample_size: 10000,
-    limit: 5,
+    country: 'all',
+    year: 'all',
+    month: 'all',
+    hour: 'all',
+    product: 'all'
   });
 
   useEffect(() => {
@@ -30,38 +33,29 @@ export const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // Use the lightweight overview endpoint
-      const response = await axios.get('/api/lightweight/overview');
-      
-      if (response.data.success) {
-        setSummary(response.data.summary);
-        setTopProducts(response.data.top_products || []);
-        setRecentRules(response.data.recent_rules || []);
+      // Fetch summary
+      const summaryRes = await axios.get('/api/summary');
+      if (summaryRes.data.success) {
+        setSummary(summaryRes.data.data);
+      }
+
+      // Fetch top products
+      const productsRes = await axios.get('/api/top_products', {
+        params: { ...filters, limit: 5 }
+      });
+      if (productsRes.data.success) {
+        setTopProducts(productsRes.data.products || []);
+      }
+
+      // Fetch recent rules
+      const rulesRes = await axios.get('/api/association_rules', {
+        params: { ...filters, limit: 5, simple: true }
+      });
+      if (rulesRes.data.success) {
+        setRecentRules(rulesRes.data.data || []);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      // Fallback to sample data
-      setSummary({
-        total_transactions: 3565,
-        total_products: 2450,
-        total_customers: 1892,
-        total_revenue: 4318862.50,
-        avg_transaction: 125.75
-      });
-      setTopProducts([
-        { Description: 'PARTY BUNTING', total_revenue: 152000 },
-        { Description: 'WHITE HANGING HEART T-LIGHT HOLDER', total_revenue: 145000 },
-        { Description: 'JUMBO BAG RED RETROSPOT', total_revenue: 138000 },
-        { Description: 'SET OF 3 CAKE TINS PANTRY DESIGN', total_revenue: 125000 },
-        { Description: 'RED WOOLLY HOTTIE WHITE HEART', total_revenue: 118000 }
-      ]);
-      setRecentRules([
-        { rule: 'WHITE HANGING HEART → JUMBO BAG', confidence: 0.85, lift: 2.1 },
-        { rule: 'PARTY BUNTING → CAKE TINS', confidence: 0.72, lift: 1.8 },
-        { rule: 'RED WOOLLY HOTTIE → SPOTTY BUNTING', confidence: 0.68, lift: 1.5 },
-        { rule: 'JUMBO BAG → SPOTTY BUNTING', confidence: 0.61, lift: 1.4 },
-        { rule: 'CAKE TINS → CAKE CASES', confidence: 0.58, lift: 1.3 }
-      ]);
     } finally {
       setLoading(false);
     }
@@ -76,29 +70,21 @@ export const Dashboard = () => {
       title: 'Total Transactions',
       value: summary?.total_transactions?.toLocaleString() || '0',
       icon: ShoppingCart,
-      trend: 'up',
-      change: '+12%',
     },
     {
       title: 'Total Products',
       value: summary?.total_products?.toLocaleString() || '0',
       icon: Package,
-      trend: 'up',
-      change: '+5%',
     },
     {
       title: 'Total Customers',
       value: summary?.total_customers?.toLocaleString() || '0',
       icon: Users,
-      trend: 'up',
-      change: '+8%',
     },
     {
       title: 'Total Revenue',
       value: `$${summary?.total_revenue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}`,
       icon: DollarSign,
-      trend: 'up',
-      change: '+15%',
     },
   ];
 
@@ -197,34 +183,6 @@ export const Dashboard = () => {
               className="border-none shadow-none"
             />
           )}
-        </div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card">
-          <h4 className="font-medium text-gray-900 dark:text-white mb-2">
-            Average Transaction Value
-          </h4>
-          <p className="text-2xl font-bold text-primary-600">
-            ${summary?.avg_transaction?.toFixed(2) || '125.75'}
-          </p>
-        </div>
-        <div className="card">
-          <h4 className="font-medium text-gray-900 dark:text-white mb-2">
-            Data Quality Score
-          </h4>
-          <p className="text-2xl font-bold text-green-600">
-            95.5%
-          </p>
-        </div>
-        <div className="card">
-          <h4 className="font-medium text-gray-900 dark:text-white mb-2">
-            Performance
-          </h4>
-          <p className="text-2xl font-bold text-purple-600">
-            Optimized
-          </p>
         </div>
       </div>
     </div>

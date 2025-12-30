@@ -1,10 +1,9 @@
-// pages/DataSummary.jsx
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Database, BarChart, PieChart, LineChart } from 'lucide-react';
+import { Database, BarChart, PieChart, LineChart, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
 export const DataSummary = () => {
   const [loading, setLoading] = useState(true);
@@ -21,6 +20,7 @@ export const DataSummary = () => {
       const response = await axios.get('/api/summary');
       if (response.data.success) {
         setSummary(response.data.data);
+        console.log('Data summary loaded:', response.data.data);
       }
     } catch (error) {
       console.error('Error fetching data summary:', error);
@@ -30,7 +30,7 @@ export const DataSummary = () => {
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner text="Loading data summary..." />;
   }
 
   if (!summary) {
@@ -41,25 +41,91 @@ export const DataSummary = () => {
           No data available
         </h3>
         <p className="text-gray-600 dark:text-gray-400">
-          Unable to load data summary
+          Unable to load data summary. Check backend connection.
         </p>
+        <button 
+          onClick={fetchDataSummary}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   const dataQualityItems = [
-    { label: 'Total Records', value: summary.data_quality?.total_records?.toLocaleString() || '0' },
-    { label: 'Data Completeness', value: `${summary.data_quality?.data_completeness || '0'}%` },
+    { 
+      label: 'Total Records', 
+      value: summary.data_quality?.total_records?.toLocaleString() || '0',
+      icon: Database 
+    },
+    { 
+      label: 'Data Completeness', 
+      value: `${summary.data_quality?.data_completeness || '0'}%`,
+      icon: CheckCircle 
+    },
+    { 
+      label: 'Data Health Score', 
+      value: `${summary.data_quality?.data_health || '0'}%`,
+      icon: TrendingUp 
+    },
+    { 
+      label: 'Multi-item Transactions', 
+      value: summary.data_quality?.multi_item_transactions?.toLocaleString() || '0',
+      icon: BarChart 
+    },
+    { 
+      label: 'Multi-item Percentage', 
+      value: `${summary.multi_item_percentage || '0'}%`,
+      icon: PieChart 
+    },
   ];
 
   const businessMetrics = [
-    { label: 'Avg Transaction Value', value: `$${summary.avg_transaction_value?.toFixed(2) || '0.00'}` },
-    { label: 'Total Countries', value: summary.total_countries || '0' },
+    { 
+      label: 'Avg Transaction Value', 
+      value: `$${summary.avg_transaction_value?.toFixed(2) || '0.00'}`,
+      icon: LineChart 
+    },
+    { 
+      label: 'Total Countries', 
+      value: summary.total_countries || '0',
+      icon: Database 
+    },
+    { 
+      label: 'Revenue per Transaction', 
+      value: `$${summary.data_quality?.revenue_per_transaction?.toFixed(2) || '0.00'}`,
+      icon: TrendingUp 
+    },
+  ];
+
+  const dataIssues = [
+    { 
+      label: 'Missing Customers', 
+      value: summary.data_quality?.missing_customers?.toLocaleString() || '0',
+      severity: summary.data_quality?.missing_customers > 0 ? 'warning' : 'good' 
+    },
+    { 
+      label: 'Missing Descriptions', 
+      value: summary.data_quality?.missing_descriptions?.toLocaleString() || '0',
+      severity: summary.data_quality?.missing_descriptions > 0 ? 'warning' : 'good' 
+    },
+    { 
+      label: 'Missing Prices', 
+      value: summary.data_quality?.missing_prices?.toLocaleString() || '0',
+      severity: summary.data_quality?.missing_prices > 0 ? 'warning' : 'good' 
+    },
+    { 
+      label: 'Missing Quantities', 
+      value: summary.data_quality?.missing_quantities?.toLocaleString() || '0',
+      severity: summary.data_quality?.missing_quantities > 0 ? 'warning' : 'good' 
+    },
   ];
 
   const dateRangeItems = [
     { label: 'Time Period', value: summary.date_range?.time_period || 'N/A' },
-    { label: 'Data Status', value: 'Optimized' },
+    { label: 'Data Period', value: `${summary.date_range?.min_year || 'N/A'} - ${summary.date_range?.max_year || 'N/A'}` },
+    { label: 'Association Readiness', value: summary.multi_item_percentage > 20 ? 'Ready' : 'Limited' },
   ];
 
   return (
@@ -74,6 +140,53 @@ export const DataSummary = () => {
       </div>
 
       <FilterPanel onFilterChange={setFilters} loading={loading} />
+
+      {/* Data Health Warning */}
+      {summary.data_quality?.data_health < 80 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <div className="flex">
+            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                Data Quality Alert
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-400">
+                <p>
+                  Data health score is {summary.data_quality?.data_health}%. Issues detected in:
+                </p>
+                <ul className="list-disc pl-5 mt-1">
+                  {summary.data_quality?.missing_customers > 0 && <li>{summary.data_quality.missing_customers} missing customer IDs</li>}
+                  {summary.data_quality?.missing_descriptions > 0 && <li>{summary.data_quality.missing_descriptions} missing product descriptions</li>}
+                  {summary.data_quality?.missing_prices > 0 && <li>{summary.data_quality.missing_prices} missing prices</li>}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Association Rules Warning */}
+      {summary.multi_item_percentage < 30 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex">
+            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                Association Rules Readiness
+              </h3>
+              <div className="mt-2 text-sm text-blue-700 dark:text-blue-400">
+                <p>
+                  Only {summary.multi_item_percentage}% of transactions have multiple items.
+                  Association rules work best when many customers buy multiple products together.
+                </p>
+                <p className="mt-1">
+                  <strong>Transactions with multiple items:</strong> {summary.data_quality?.multi_item_transactions?.toLocaleString() || '0'} / {summary.total_transactions?.toLocaleString() || '0'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -151,8 +264,13 @@ export const DataSummary = () => {
           </h3>
           <div className="space-y-4">
             {dataQualityItems.map((item, index) => (
-              <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
+              <div key={index} className="flex justify-between items-center py-3 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                <div className="flex items-center">
+                  <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800 mr-3">
+                    <item.icon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <span className="text-gray-700 dark:text-gray-300">{item.label}</span>
+                </div>
                 <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
               </div>
             ))}
@@ -166,8 +284,13 @@ export const DataSummary = () => {
           </h3>
           <div className="space-y-4">
             {businessMetrics.map((item, index) => (
-              <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
+              <div key={index} className="flex justify-between items-center py-3 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                <div className="flex items-center">
+                  <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800 mr-3">
+                    <item.icon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <span className="text-gray-700 dark:text-gray-300">{item.label}</span>
+                </div>
                 <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
               </div>
             ))}
@@ -175,45 +298,50 @@ export const DataSummary = () => {
         </div>
       </div>
 
-      {/* Additional Info */}
+      {/* Data Issues & Date Range */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Date Range */}
+        {/* Data Issues */}
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Date Range
+            Data Issues
           </h3>
           <div className="space-y-3">
-            {dateRangeItems.map((item, index) => (
-              <div key={index} className="flex justify-between">
+            {dataIssues.map((item, index) => (
+              <div key={index} className="flex justify-between items-center">
                 <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
-                <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
+                <span className={`font-medium ${item.severity === 'warning' ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {item.value}
+                  {item.severity === 'warning' && (
+                    <AlertCircle className="inline-block ml-1 h-4 w-4" />
+                  )}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Geographic Coverage */}
+        {/* Date Range */}
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Geographic Coverage
+            Date Range & Analysis
           </h3>
           <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Total Countries</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {summary.total_countries}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Avg Transaction Value</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                ${summary.avg_transaction_value?.toFixed(2)}
-              </span>
-            </div>
+            {dateRangeItems.map((item, index) => (
+              <div key={index} className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
+                <span className={`font-medium ${
+                  item.value === 'Ready' ? 'text-green-600' : 
+                  item.value === 'Limited' ? 'text-yellow-600' : 
+                  'text-gray-900 dark:text-white'
+                }`}>
+                  {item.value}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Data Health */}
+        {/* Data Health Score */}
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Data Health Score
@@ -232,7 +360,7 @@ export const DataSummary = () => {
                     cy="64"
                   />
                   <circle
-                    className="text-green-500"
+                    className={`${summary.data_quality?.data_health >= 80 ? 'text-green-500' : summary.data_quality?.data_health >= 60 ? 'text-yellow-500' : 'text-red-500'}`}
                     strokeWidth="10"
                     strokeLinecap="round"
                     stroke="currentColor"
@@ -240,56 +368,36 @@ export const DataSummary = () => {
                     r="56"
                     cx="64"
                     cy="64"
-                    strokeDasharray={`${(summary.data_quality?.data_completeness || 0) * 3.52} 352`}
+                    strokeDasharray={`${(summary.data_quality?.data_health || 0) * 3.52} 352`}
                     strokeDashoffset="0"
                     transform="rotate(-90 64 64)"
                   />
                 </svg>
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
                   <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                    {summary.data_quality?.data_completeness || 0}%
+                    {summary.data_quality?.data_health || 0}%
                   </span>
                 </div>
               </div>
             </div>
             <p className="text-gray-600 dark:text-gray-400 mt-4">
-              Overall data completeness score
+              {summary.data_quality?.data_health >= 80 ? 'Excellent data quality' : 
+               summary.data_quality?.data_health >= 60 ? 'Good data quality' : 
+               'Needs improvement'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Performance Note */}
-      <div className="card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Performance Optimizations
-        </h3>
-        <div className="space-y-3">
-          <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-green-600 dark:text-green-400">✓</span>
-            </div>
-            <span className="ml-3 text-gray-700 dark:text-gray-300">
-              Data sampling enabled (max 20,000 records per query)
-            </span>
-          </div>
-          <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-green-600 dark:text-green-400">✓</span>
-            </div>
-            <span className="ml-3 text-gray-700 dark:text-gray-300">
-              Response compression and caching enabled
-            </span>
-          </div>
-          <div className="flex items-start">
-            <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-800 flex items-center justify-center mt-0.5">
-              <span className="text-xs font-bold text-green-600 dark:text-green-400">✓</span>
-            </div>
-            <span className="ml-3 text-gray-700 dark:text-gray-300">
-              Pagination and limits applied to all queries
-            </span>
-          </div>
-        </div>
+      {/* Refresh Button */}
+      <div className="flex justify-end">
+        <button 
+          onClick={fetchDataSummary}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Database className="h-4 w-4 mr-2" />
+          Refresh Data Summary
+        </button>
       </div>
     </div>
   );
