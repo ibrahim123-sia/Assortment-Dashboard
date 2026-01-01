@@ -9,8 +9,10 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
     month: 'all',
     hour: 'all',
     product: 'all',
+    weekday: 'all',
     min_support: 0.01,
     min_confidence: 0.3,
+    min_lift: 1.0,
   });
 
   const [filterOptions, setFilterOptions] = useState({
@@ -19,6 +21,7 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
     months: [],
     hours: [],
     products: [],
+    weekdays: [],
   });
 
   const [isOpen, setIsOpen] = useState(true);
@@ -51,8 +54,10 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
       month: 'all',
       hour: 'all',
       product: 'all',
+      weekday: 'all',
       min_support: 0.01,
       min_confidence: 0.3,
+      min_lift: 1.0,
     };
     setFilters(resetFilters);
     onFilterChange(resetFilters);
@@ -82,31 +87,32 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
       </div>
 
       <div className={`px-4 py-4 space-y-4 ${isOpen ? 'block' : 'hidden'}`}>
-        {/* Support & Confidence Sliders */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Algorithm Parameters */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Min Support: {filters.min_support.toFixed(3)}
+              Min Support: {(filters.min_support * 100).toFixed(2)}%
             </label>
             <input
               type="range"
               min="0.001"
-              max="0.1"
+              max="0.05"
               step="0.001"
               value={filters.min_support}
               onChange={(e) => handleFilterChange('min_support', parseFloat(e.target.value))}
               className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              disabled={loading}
             />
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
               <span>0.1%</span>
+              <span>2.5%</span>
               <span>5%</span>
-              <span>10%</span>
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Min Confidence: {filters.min_confidence.toFixed(2)}
+              Min Confidence: {(filters.min_confidence * 100).toFixed(0)}%
             </label>
             <input
               type="range"
@@ -116,6 +122,7 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
               value={filters.min_confidence}
               onChange={(e) => handleFilterChange('min_confidence', parseFloat(e.target.value))}
               className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              disabled={loading}
             />
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
               <span>10%</span>
@@ -123,9 +130,30 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
               <span>100%</span>
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Min Lift: {filters.min_lift.toFixed(2)}
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="3"
+              step="0.1"
+              value={filters.min_lift}
+              onChange={(e) => handleFilterChange('min_lift', parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              disabled={loading}
+            />
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>0.5</span>
+              <span>1.5</span>
+              <span>3.0</span>
+            </div>
+          </div>
         </div>
 
-        {/* Country, Year, Month, Hour, Product Filters */}
+        {/* Country, Year, Month, Hour, Weekday, Product Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -196,8 +224,27 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
             >
               <option value="all">All Hours</option>
               {filterOptions.hours?.map((hour) => (
-                <option key={hour} value={hour}>
-                  {hour}:00
+                <option key={hour.value} value={hour.value}>
+                  {hour.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Weekday
+            </label>
+            <select
+              value={filters.weekday}
+              onChange={(e) => handleFilterChange('weekday', e.target.value)}
+              className="input-field"
+              disabled={loading}
+            >
+              <option value="all">All Weekdays</option>
+              {filterOptions.weekdays?.map((weekday) => (
+                <option key={weekday} value={weekday}>
+                  {weekday}
                 </option>
               ))}
             </select>
@@ -223,8 +270,41 @@ export const FilterPanel = ({ onFilterChange, loading }) => {
           </div>
         </div>
 
+        {/* Filter Statistics */}
+        {filterOptions.statistics && (
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Countries</p>
+                <p className="font-medium text-gray-900 dark:text-white">{filterOptions.statistics.total_countries}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Years</p>
+                <p className="font-medium text-gray-900 dark:text-white">{filterOptions.statistics.total_years}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Products</p>
+                <p className="font-medium text-gray-900 dark:text-white">{filterOptions.statistics.total_products}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Data Range</p>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  {filterOptions.statistics.data_range?.min_year || 'N/A'} - {filterOptions.statistics.data_range?.max_year || 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={fetchFilterOptions}
+            className="btn-secondary px-4 py-2"
+            disabled={loading}
+          >
+            Refresh Options
+          </button>
           <button
             onClick={handleReset}
             className="btn-secondary px-4 py-2"

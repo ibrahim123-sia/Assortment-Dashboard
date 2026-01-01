@@ -31,8 +31,23 @@ export const DataTable = ({
     ? [...currentData].sort((a, b) => {
         const aValue = a[sortColumn];
         const bValue = b[sortColumn];
-        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        
+        // Handle null/undefined values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return sortDirection === 'asc' ? -1 : 1;
+        if (bValue == null) return sortDirection === 'asc' ? 1 : -1;
+        
+        // Handle numeric comparison
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+        
+        // Handle string comparison
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+        
+        if (aStr < bStr) return sortDirection === 'asc' ? -1 : 1;
+        if (aStr > bStr) return sortDirection === 'asc' ? 1 : -1;
         return 0;
       })
     : currentData;
@@ -52,6 +67,16 @@ export const DataTable = ({
     );
   }
 
+  if (data.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="text-center py-12">
+          <p className="text-gray-500 dark:text-gray-400">No data available</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}>
       <div className="overflow-x-auto">
@@ -61,7 +86,9 @@ export const DataTable = ({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${
+                    column.sortable ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800' : ''
+                  }`}
                   onClick={() => column.sortable && handleSort(column.key)}
                 >
                   <div className="flex items-center">
@@ -87,15 +114,18 @@ export const DataTable = ({
                 onClick={() => onRowClick && onRowClick(row)}
                 className={`${
                   onRowClick
-                    ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900'
+                    ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors'
                     : ''
                 }`}
               >
                 {columns.map((column) => (
-                  <td key={column.key} className="table-cell">
+                  <td 
+                    key={column.key} 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200"
+                  >
                     {column.render
                       ? column.render(row[column.key], row)
-                      : row[column.key]}
+                      : row[column.key] != null ? row[column.key] : '—'}
                   </td>
                 ))}
               </tr>
@@ -106,7 +136,7 @@ export const DataTable = ({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
+        <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
           <div className="text-sm text-gray-700 dark:text-gray-400">
             Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
             <span className="font-medium">{Math.min(endIndex, data.length)}</span> of{' '}
@@ -116,7 +146,7 @@ export const DataTable = ({
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="relative inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -137,11 +167,11 @@ export const DataTable = ({
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`relative inline-flex items-center px-3 py-2 text-sm font-medium ${
+                    className={`relative inline-flex items-center px-3 py-2 text-sm font-medium mx-0.5 rounded-md transition-colors ${
                       currentPage === pageNum
-                        ? 'z-10 bg-primary-50 dark:bg-primary-900/20 border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
-                        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    } border mx-0.5 rounded-md`}
+                        ? 'z-10 bg-blue-50 dark:bg-blue-900/20 border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400 border'
+                        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 border'
+                    }`}
                   >
                     {pageNum}
                   </button>
@@ -151,7 +181,7 @@ export const DataTable = ({
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="relative inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

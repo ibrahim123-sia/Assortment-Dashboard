@@ -23,7 +23,8 @@ export const Dashboard = () => {
     year: 'all',
     month: 'all',
     hour: 'all',
-    product: 'all'
+    product: 'all',
+    weekday: 'all'
   });
 
   useEffect(() => {
@@ -39,17 +40,27 @@ export const Dashboard = () => {
         setSummary(summaryRes.data.data);
       }
 
-      // Fetch top products
+      // Fetch top products with sort by revenue
       const productsRes = await axios.get('/api/top_products', {
-        params: { ...filters, limit: 5 }
+        params: { 
+          ...filters, 
+          limit: 5,
+          sort_by: 'revenue'
+        }
       });
       if (productsRes.data.success) {
         setTopProducts(productsRes.data.products || []);
       }
 
-      // Fetch recent rules
+      // Fetch recent rules with easy settings
       const rulesRes = await axios.get('/api/association_rules', {
-        params: { ...filters, limit: 5, simple: true }
+        params: { 
+          ...filters, 
+          limit: 5, 
+          simple: true,
+          min_support: 0.01,
+          min_confidence: 0.3
+        }
       });
       if (rulesRes.data.success) {
         setRecentRules(rulesRes.data.data || []);
@@ -83,23 +94,47 @@ export const Dashboard = () => {
     },
     {
       title: 'Total Revenue',
-      value: `$${summary?.total_revenue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}`,
+      value: `$${summary?.total_revenue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}`,
       icon: DollarSign,
     },
   ];
 
   const productColumns = [
-    { key: 'Description', title: 'Product', sortable: true },
+    { 
+      key: 'description', 
+      title: 'Product', 
+      sortable: true,
+      render: (value) => (
+        <div className="max-w-xs truncate" title={value}>
+          {value || 'Unknown Product'}
+        </div>
+      )
+    },
     { 
       key: 'total_revenue', 
       title: 'Revenue', 
       sortable: true, 
       render: (value) => `$${typeof value === 'number' ? value.toFixed(2) : '0.00'}` 
     },
+    { 
+      key: 'transactions', 
+      title: 'Transactions', 
+      sortable: true,
+      render: (value) => value?.toLocaleString() || '0'
+    },
   ];
 
   const rulesColumns = [
-    { key: 'rule', title: 'Association Rule', sortable: false },
+    { 
+      key: 'rule', 
+      title: 'Association Rule', 
+      sortable: false,
+      render: (value) => (
+        <div className="max-w-xs truncate" title={value}>
+          {value || 'No rule'}
+        </div>
+      )
+    },
     { 
       key: 'confidence', 
       title: 'Confidence', 
@@ -110,7 +145,11 @@ export const Dashboard = () => {
       key: 'lift', 
       title: 'Lift', 
       sortable: true, 
-      render: (value) => typeof value === 'number' ? value.toFixed(2) : '0.00' 
+      render: (value) => (
+        <span className={value > 1 ? 'text-green-600' : 'text-red-600'}>
+          {typeof value === 'number' ? value.toFixed(2) : '0.00'}
+        </span>
+      ) 
     },
   ];
 
@@ -134,6 +173,51 @@ export const Dashboard = () => {
         ))}
       </div>
 
+      {/* Additional Metrics */}
+      {summary && !loading && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="card">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  Avg Transaction Value
+                </p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  ${summary.avg_transaction_value?.toFixed(2) || '0.00'}
+                </p>
+              </div>
+              <DollarSign className="h-6 w-6 text-green-600" />
+            </div>
+          </div>
+          <div className="card">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  Multi-item Transactions
+                </p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {summary.data_quality?.multi_item_transactions?.toLocaleString() || '0'}
+                </p>
+              </div>
+              <ShoppingCart className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+          <div className="card">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  Data Health
+                </p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {summary.data_quality?.data_health || '0'}%
+                </p>
+              </div>
+              <TrendingUp className="h-6 w-6 text-purple-600" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Products */}
         <div className="card">
@@ -143,20 +227,24 @@ export const Dashboard = () => {
                 Top Products by Revenue
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Best performing products
+                Best performing products (filtered)
               </p>
             </div>
-            <TrendingUp className="h-5 w-5 text-primary-600" />
+            <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           {loading ? (
             <LoadingSpinner />
-          ) : (
+          ) : topProducts.length > 0 ? (
             <DataTable
               columns={productColumns}
               data={topProducts}
               itemsPerPage={5}
               className="border-none shadow-none"
             />
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500 dark:text-gray-400">No product data available</p>
+            </div>
           )}
         </div>
 
@@ -168,20 +256,24 @@ export const Dashboard = () => {
                 Recent Association Rules
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Latest product associations
+                Top product associations
               </p>
             </div>
-            <BarChart3 className="h-5 w-5 text-primary-600" />
+            <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
           </div>
           {loading ? (
             <LoadingSpinner />
-          ) : (
+          ) : recentRules.length > 0 ? (
             <DataTable
               columns={rulesColumns}
               data={recentRules}
               itemsPerPage={5}
               className="border-none shadow-none"
             />
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500 dark:text-gray-400">No association rules found</p>
+            </div>
           )}
         </div>
       </div>

@@ -3,18 +3,21 @@ import axios from 'axios';
 import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Package, TrendingUp, DollarSign, Tag, RefreshCw, AlertCircle } from 'lucide-react';
+import { Package, TrendingUp, DollarSign, Tag, RefreshCw, AlertCircle, ShoppingCart } from 'lucide-react';
 
 export const ProductBundles = () => {
   const [loading, setLoading] = useState(false);
   const [bundles, setBundles] = useState([]);
+  const [metadata, setMetadata] = useState(null);
   const [filters, setFilters] = useState({
     min_confidence: 0.3,
+    min_transactions: 5,
     country: 'all',
     year: 'all',
     month: 'all',
     hour: 'all',
-    product: 'all'
+    product: 'all',
+    weekday: 'all'
   });
 
   useEffect(() => {
@@ -24,23 +27,22 @@ export const ProductBundles = () => {
   const fetchBundles = async () => {
     setLoading(true);
     try {
-      console.log('Fetching bundles with filters:', filters);
-      
       const response = await axios.get('/api/suggested_bundles', {
         params: filters,
       });
 
-      console.log('Bundles API Response:', response.data);
-
       if (response.data.success) {
         setBundles(response.data.bundles || []);
+        setMetadata(response.data.metadata || null);
       } else {
         console.error('API returned error:', response.data.error);
         setBundles([]);
+        setMetadata(null);
       }
     } catch (error) {
       console.error('Error fetching bundles:', error);
       setBundles([]);
+      setMetadata(null);
     } finally {
       setLoading(false);
     }
@@ -53,11 +55,13 @@ export const ProductBundles = () => {
   const handleResetFilters = () => {
     setFilters({
       min_confidence: 0.3,
+      min_transactions: 5,
       country: 'all',
       year: 'all',
       month: 'all',
       hour: 'all',
-      product: 'all'
+      product: 'all',
+      weekday: 'all'
     });
   };
 
@@ -67,7 +71,7 @@ export const ProductBundles = () => {
       title: 'Bundle ID',
       sortable: true,
       render: (value) => (
-        <span className="font-mono font-bold text-primary-600">{value}</span>
+        <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{value}</span>
       ),
     },
     {
@@ -79,21 +83,24 @@ export const ProductBundles = () => {
           <div className="font-medium text-gray-900 dark:text-white">
             {value}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            {row.products?.slice(0, 2).map(p => p.substring(0, 20)).join(', ')}
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+            {row.products?.slice(0, 2).map(p => p.substring(0, 20)).join(' + ')}
             {row.products?.length > 2 && ` + ${row.products.length - 2} more`}
           </div>
         </div>
       ),
     },
     {
-      key: 'product_count',
-      title: 'Size',
+      key: 'transaction_count',
+      title: 'Transactions',
       sortable: true,
       render: (value) => (
         <div className="text-center">
-          <span className="font-bold text-gray-900 dark:text-white">{value}</span>
-          <div className="text-xs text-gray-500 dark:text-gray-400">products</div>
+          <div className="flex items-center justify-center">
+            <ShoppingCart className="h-4 w-4 text-gray-400 mr-1" />
+            <span className="font-bold text-gray-900 dark:text-white">{value || 0}</span>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">occurrences</div>
         </div>
       ),
     },
@@ -124,10 +131,10 @@ export const ProductBundles = () => {
           <div className="flex items-center justify-end">
             <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
             <span className="font-bold text-gray-900 dark:text-white">
-              ${typeof value === 'number' ? value.toFixed(2) : '0.00'}
+              ${typeof value === 'number' ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </span>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">per bundle</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">total revenue</div>
         </div>
       ),
     },
@@ -153,12 +160,10 @@ export const ProductBundles = () => {
 
   // Calculate stats
   const totalRevenue = bundles.reduce((acc, b) => acc + (b.estimated_revenue || 0), 0);
-  const avgBundleSize = bundles.length > 0 
-    ? bundles.reduce((acc, b) => acc + (b.product_count || 0), 0) / bundles.length 
-    : 0;
   const avgConfidence = bundles.length > 0 
     ? bundles.reduce((acc, b) => acc + (b.confidence || 0), 0) / bundles.length 
     : 0;
+  const totalTransactions = bundles.reduce((acc, b) => acc + (b.transaction_count || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -167,7 +172,7 @@ export const ProductBundles = () => {
           Suggested Product Bundles
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Intelligent product bundles based on association rules
+          Intelligent product bundles based on co-purchase patterns
         </p>
       </div>
 
@@ -179,6 +184,13 @@ export const ProductBundles = () => {
         >
           <Package className="h-4 w-4 mr-2" />
           Lower Confidence (20%)
+        </button>
+        <button
+          onClick={() => setFilters({...filters, min_transactions: 2})}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <ShoppingCart className="h-4 w-4 mr-2" />
+          Minimum 2 Transactions
         </button>
         <button
           onClick={handleResetFilters}
@@ -216,10 +228,10 @@ export const ProductBundles = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Avg. Bundle Size
+                  Total Revenue
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {avgBundleSize.toFixed(1)}
+                  ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -231,10 +243,10 @@ export const ProductBundles = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Est. Revenue
+                  Avg. Confidence
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  ${totalRevenue.toFixed(2)}
+                  {(avgConfidence * 100).toFixed(1)}%
                 </p>
               </div>
             </div>
@@ -246,10 +258,10 @@ export const ProductBundles = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Avg. Confidence
+                  Total Transactions
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {(avgConfidence * 100).toFixed(1)}%
+                  {totalTransactions}
                 </p>
               </div>
             </div>
@@ -265,6 +277,7 @@ export const ProductBundles = () => {
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Suggested bundles based on co-purchase patterns with confidence ≥ {(filters.min_confidence * 100).toFixed(0)}%
+            {metadata?.filtered_records && ` • From ${metadata.filtered_records.toLocaleString()} filtered records`}
           </p>
         </div>
 
@@ -288,6 +301,10 @@ export const ProductBundles = () => {
               </li>
               <li className="flex items-start">
                 <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-yellow-500" />
+                <span>Minimum transaction count is too high (try 2 instead of 5)</span>
+              </li>
+              <li className="flex items-start">
+                <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-yellow-500" />
                 <span>Filters are too restrictive (try removing filters)</span>
               </li>
               <li className="flex items-start">
@@ -297,10 +314,10 @@ export const ProductBundles = () => {
             </ul>
             <div className="flex justify-center space-x-4">
               <button 
-                onClick={() => setFilters({...filters, min_confidence: 0.2})}
+                onClick={() => setFilters({...filters, min_confidence: 0.2, min_transactions: 2})}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
               >
-                Try Lower Confidence (20%)
+                Try Lower Thresholds
               </button>
               <button 
                 onClick={handleRetry}
@@ -314,7 +331,8 @@ export const ProductBundles = () => {
         ) : (
           <>
             <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              Found {bundles.length} product bundles. Confidence shows how often products are bought together.
+              Found {bundles.length} product bundles from {metadata?.top_products_analyzed || 0} top products. 
+              Lift &gt; 1 indicates products are purchased together more often than expected.
             </div>
             <DataTable
               columns={columns}
@@ -322,36 +340,57 @@ export const ProductBundles = () => {
               itemsPerPage={10}
               onRowClick={(bundle) => console.log('Bundle selected:', bundle)}
             />
+            {metadata && (
+              <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                Analyzed {metadata.top_products_analyzed} top products • 
+                Minimum {metadata.min_transactions} transactions per bundle • 
+                Filtered from {metadata.filtered_records} records
+              </div>
+            )}
           </>
         )}
       </div>
 
       {/* Action Section */}
       {!loading && bundles.length > 0 && (
-        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between">
             <div>
               <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Ready to implement these bundles?
               </h4>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                These bundles are based on actual customer purchase patterns
+                These bundles are based on actual customer purchase patterns with {bundles.length} unique combinations
               </p>
             </div>
             <div className="flex space-x-3 mt-4 md:mt-0">
               <button 
-                onClick={() => alert('Export functionality would be implemented here')}
+                onClick={() => {
+                  const csvContent = bundles.map(b => ({
+                    'Bundle ID': b.bundle_id,
+                    'Products': b.products.join(';'),
+                    'Confidence': `${(b.confidence * 100).toFixed(1)}%`,
+                    'Lift': b.lift.toFixed(2),
+                    'Transactions': b.transaction_count,
+                    'Estimated Revenue': `$${b.estimated_revenue.toFixed(2)}`
+                  }));
+                  console.log('Exporting bundles:', csvContent);
+                  alert('Export functionality would be implemented here');
+                }}
                 className="btn-secondary flex items-center"
               >
                 <Package className="h-4 w-4 mr-2" />
                 Export as CSV
               </button>
               <button 
-                onClick={() => alert('Promotion creation would be implemented here')}
+                onClick={() => {
+                  const topBundle = bundles.sort((a, b) => b.confidence - a.confidence)[0];
+                  alert(`Create promotion for: ${topBundle.bundle_name}\nProducts: ${topBundle.products.join(', ')}\nConfidence: ${(topBundle.confidence * 100).toFixed(1)}%`);
+                }}
                 className="btn-primary flex items-center"
               >
                 <DollarSign className="h-4 w-4 mr-2" />
-                Create Promotion
+                Create Top Promotion
               </button>
             </div>
           </div>

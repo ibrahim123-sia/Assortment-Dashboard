@@ -3,14 +3,16 @@ import axios from "axios";
 import { FilterPanel } from "../components/FilterPanel";
 import { DataTable } from "../components/DataTable";
 import { LoadingSpinner } from "../components/LoadingSpinner";
-import { DollarSign, TrendingUp, BarChart3, Target } from "lucide-react";
+import { DollarSign, TrendingUp, BarChart3, Target, Globe, Users } from "lucide-react";
 
 export const RevenueAnalysis = () => {
   const [loading, setLoading] = useState(true);
   const [revenueData, setRevenueData] = useState([]);
   const [filters, setFilters] = useState({
-    sample_size: 10000,
     limit: 10,
+    country: 'all',
+    year: 'all',
+    month: 'all'
   });
 
   useEffect(() => {
@@ -24,9 +26,15 @@ export const RevenueAnalysis = () => {
         params: filters,
       });
 
-      setRevenueData(response.data.revenue_analysis || []);
+      if (response.data.success) {
+        setRevenueData(response.data.revenue_analysis || []);
+      } else {
+        console.error('API error:', response.data.error);
+        setRevenueData([]);
+      }
     } catch (error) {
       console.error("Error fetching revenue analysis:", error);
+      setRevenueData([]);
     } finally {
       setLoading(false);
     }
@@ -34,16 +42,19 @@ export const RevenueAnalysis = () => {
 
   const columns = [
     {
-      key: "bundle_name",
-      title: "Bundle",
+      key: "country",
+      title: "Country",
       sortable: true,
       render: (value, row) => (
-        <div>
-          <div className="font-medium text-gray-900 dark:text-white">
-            {row.bundle_id}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            {value}
+        <div className="flex items-center">
+          <Globe className="h-4 w-4 text-gray-400 mr-2" />
+          <div>
+            <div className="font-medium text-gray-900 dark:text-white">
+              {value || 'Unknown'}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Market share: {row.market_share?.toFixed(1) || '0.0'}%
+            </div>
           </div>
         </div>
       ),
@@ -81,6 +92,21 @@ export const RevenueAnalysis = () => {
       ),
     },
     {
+      key: "customer_count",
+      title: "Customers",
+      sortable: true,
+      render: (value) => (
+        <div className="text-center">
+          <div className="flex items-center justify-center">
+            <Users className="h-4 w-4 text-gray-400 mr-1" />
+            <span className="font-bold text-gray-900 dark:text-white">
+              {typeof value === "number" ? value.toLocaleString() : "0"}
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
       key: "avg_transaction_value",
       title: "Avg. Transaction",
       sortable: true,
@@ -96,29 +122,17 @@ export const RevenueAnalysis = () => {
       ),
     },
     {
-      key: "revenue_potential",
-      title: "Revenue Potential",
+      key: "revenue_per_customer",
+      title: "Per Customer",
       sortable: true,
       render: (value) => (
-        <div
-          className={`text-right font-bold ${
-            value > 0 ? "text-green-600" : "text-red-600"
-          }`}
-        >
-          {value > 0 ? "+" : ""}$
-          {Math.abs(typeof value === "number" ? value : 0).toFixed(2)}
-        </div>
-      ),
-    },
-    {
-      key: "confidence",
-      title: "Confidence",
-      sortable: true,
-      render: (value) => (
-        <div className="text-center">
-          <span className="font-bold text-gray-900 dark:text-white">
-            {(typeof value === "number" ? value * 100 : 0).toFixed(1)}%
-          </span>
+        <div className="text-right">
+          <div className="flex items-center justify-end">
+            <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
+            <span className="font-bold text-gray-900 dark:text-white">
+              {typeof value === "number" ? value.toFixed(2) : "0.00"}
+            </span>
+          </div>
         </div>
       ),
     },
@@ -128,11 +142,12 @@ export const RevenueAnalysis = () => {
     const totals = revenueData.reduce(
       (acc, item) => ({
         totalRevenue: acc.totalRevenue + (item.total_revenue || 0),
-        totalPotential: acc.totalPotential + (item.revenue_potential || 0),
-        avgConfidence:
-          acc.avgConfidence + (item.confidence || 0) / revenueData.length,
+        totalTransactions: acc.totalTransactions + (item.transaction_count || 0),
+        totalCustomers: acc.totalCustomers + (item.customer_count || 0),
+        avgTransaction: (acc.avgTransaction * acc.count + (item.avg_transaction_value || 0)) / (acc.count + 1),
+        count: acc.count + 1,
       }),
-      { totalRevenue: 0, totalPotential: 0, avgConfidence: 0 }
+      { totalRevenue: 0, totalTransactions: 0, totalCustomers: 0, avgTransaction: 0, count: 0 }
     );
     return totals;
   };
@@ -146,7 +161,7 @@ export const RevenueAnalysis = () => {
           Revenue Analysis
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Financial impact analysis of suggested product bundles
+          Financial performance analysis by country
         </p>
       </div>
 
@@ -181,14 +196,10 @@ export const RevenueAnalysis = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Revenue Potential
+                  Total Transactions
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  $
-                  {totals.totalPotential.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {totals.totalTransactions.toLocaleString()}
                 </p>
               </div>
             </div>
@@ -196,14 +207,14 @@ export const RevenueAnalysis = () => {
           <div className="card">
             <div className="flex items-center">
               <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                <BarChart3 className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Avg. Confidence
+                  Total Customers
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {(totals.avgConfidence * 100).toFixed(1)}%
+                  {totals.totalCustomers.toLocaleString()}
                 </p>
               </div>
             </div>
@@ -215,10 +226,10 @@ export const RevenueAnalysis = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Bundles Analyzed
+                  Avg. Transaction
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {revenueData.length}
+                  ${totals.avgTransaction.toFixed(2)}
                 </p>
               </div>
             </div>
@@ -230,15 +241,15 @@ export const RevenueAnalysis = () => {
       <div className="card">
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Bundle Revenue Analysis
+            Country Revenue Analysis
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Actual revenue vs. estimated revenue potential for each bundle
+            Revenue distribution and performance metrics by country
           </p>
         </div>
 
         {loading ? (
-          <LoadingSpinner />
+          <LoadingSpinner text="Loading revenue data..." />
         ) : revenueData.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-400 dark:text-gray-500 mb-4">
@@ -252,9 +263,9 @@ export const RevenueAnalysis = () => {
             </p>
             <button
               onClick={fetchRevenueAnalysis}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Load Sample Data
+              Retry Loading
             </button>
           </div>
         ) : (
@@ -263,24 +274,21 @@ export const RevenueAnalysis = () => {
               columns={columns}
               data={revenueData}
               itemsPerPage={10}
-              onRowClick={(item) => console.log("Revenue item selected:", item)}
+              onRowClick={(item) => console.log("Country selected:", item)}
             />
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Showing {revenueData.length} bundles
+                    Showing {revenueData.length} countries • Total {totals.count} analyzed
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Total Revenue Potential:{" "}
-                    <span className="text-green-600">
-                      +${totals.totalPotential.toFixed(2)}
-                    </span>
+                    Global Average Transaction: <span className="text-blue-600">${totals.avgTransaction.toFixed(2)}</span>
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Potential additional revenue from bundle implementation
+                    Across all countries and customers
                   </p>
                 </div>
               </div>
@@ -294,7 +302,7 @@ export const RevenueAnalysis = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card">
             <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Top Performing Bundles
+              Top Performing Countries
             </h4>
             <div className="space-y-4">
               {[...revenueData]
@@ -302,23 +310,26 @@ export const RevenueAnalysis = () => {
                 .slice(0, 3)
                 .map((item) => (
                   <div
-                    key={item.bundle_id}
+                    key={item.country}
                     className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg"
                   >
                     <div>
                       <p className="font-medium text-gray-900 dark:text-white">
-                        {item.bundle_id}
+                        {item.country}
                       </p>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {item.transaction_count || 0} transactions
+                        {item.customer_count?.toLocaleString() || 0} customers
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-gray-900 dark:text-white">
-                        ${(item.total_revenue || 0).toFixed(2)}
+                        ${(item.total_revenue || 0).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </p>
                       <p className="text-sm text-green-600">
-                        +${(item.revenue_potential || 0).toFixed(2)} potential
+                        ${(item.revenue_per_customer || 0).toFixed(2)} per customer
                       </p>
                     </div>
                   </div>
@@ -327,7 +338,7 @@ export const RevenueAnalysis = () => {
           </div>
           <div className="card">
             <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Implementation Recommendations
+              Market Insights
             </h4>
             <ul className="space-y-3">
               <li className="flex items-start">
@@ -337,7 +348,7 @@ export const RevenueAnalysis = () => {
                   </span>
                 </div>
                 <span className="ml-3 text-gray-700 dark:text-gray-300">
-                  Prioritize bundles with high revenue potential (&gt; $300)
+                  Focus on high-value markets with revenue per customer &gt; $50
                 </span>
               </li>
               <li className="flex items-start">
@@ -347,7 +358,7 @@ export const RevenueAnalysis = () => {
                   </span>
                 </div>
                 <span className="ml-3 text-gray-700 dark:text-gray-300">
-                  Focus on bundles with confidence ≥ 70% for reliable results
+                  Expand in markets with high transaction frequency
                 </span>
               </li>
               <li className="flex items-start">
@@ -357,7 +368,7 @@ export const RevenueAnalysis = () => {
                   </span>
                 </div>
                 <span className="ml-3 text-gray-700 dark:text-gray-300">
-                  Consider seasonal bundles for upcoming promotions
+                  Consider localization for markets with &gt; 5% market share
                 </span>
               </li>
             </ul>

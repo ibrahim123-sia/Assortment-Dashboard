@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
+import { ZoomIn, ZoomOut, RefreshCw, AlertCircle } from 'lucide-react';
 
 export const NetworkGraph = ({ data, loading, height = 500 }) => {
   const fgRef = useRef();
@@ -24,11 +24,30 @@ export const NetworkGraph = ({ data, loading, height = 500 }) => {
     return () => window.removeEventListener('resize', updateDimensions);
   }, [height]);
 
+  // Transform data for ForceGraph
+  const transformedData = {
+    nodes: data.nodes.map(node => ({
+      id: node.id,
+      name: node.name,
+      group: node.group || 1,
+      value: node.value || 1,
+      revenue: node.revenue || 0,
+      transactions: node.transactions || 0,
+    })),
+    links: data.links.map(link => ({
+      source: link.source,
+      target: link.target,
+      value: link.value || 0.1,
+      strength: link.strength || 1,
+      transactions: link.transactions || 0,
+    }))
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[500px] bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary-600 border-r-transparent"></div>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">
             Loading network graph...
           </p>
@@ -41,10 +60,10 @@ export const NetworkGraph = ({ data, loading, height = 500 }) => {
     return (
       <div className="flex flex-col items-center justify-center h-[500px] bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="text-gray-400 dark:text-gray-500 mb-4">
-          <RefreshCw className="h-12 w-12 mx-auto" />
+          <AlertCircle className="h-12 w-12 mx-auto" />
         </div>
-        <p className="text-gray-600 dark:text-gray-400">
-          No network data available. Try adjusting your filters.
+        <p className="text-gray-600 dark:text-gray-400 text-center px-4">
+          No network data available. Try adjusting your filters or lowering the support threshold.
         </p>
       </div>
     );
@@ -56,11 +75,11 @@ export const NetworkGraph = ({ data, loading, height = 500 }) => {
       const connectedLinks = new Set();
 
       // Find connected nodes
-      data.links.forEach((link) => {
+      transformedData.links.forEach((link) => {
         if (link.source.id === node.id || link.target.id === node.id) {
           connectedLinks.add(link);
-          connectedNodes.add(link.source);
-          connectedNodes.add(link.target);
+          if (link.source.id === node.id) connectedNodes.add(link.target);
+          if (link.target.id === node.id) connectedNodes.add(link.source);
         }
       });
 
@@ -88,6 +107,27 @@ export const NetworkGraph = ({ data, loading, height = 500 }) => {
     if (fgRef.current) {
       fgRef.current.zoomToFit(400);
     }
+  };
+
+  const getNodeColor = (node) => {
+    if (highlightNodes.has(node)) return '#3b82f6';
+    const groups = {
+      'Low Price': '#10b981',
+      'Medium Price': '#f59e0b',
+      'High Price': '#ef4444',
+    };
+    return groups[node.group] || '#6b7280';
+  };
+
+  const getLinkColor = (link) => {
+    if (highlightLinks.has(link)) return '#3b82f6';
+    return link.strength > 1.5 ? '#10b981' : link.strength > 1 ? '#f59e0b' : '#9ca3af';
+  };
+
+  const getNodeSize = (node) => {
+    const baseSize = 5;
+    const revenueFactor = Math.log10(node.revenue + 1) / 2;
+    return baseSize + revenueFactor * 3;
   };
 
   return (
@@ -118,47 +158,82 @@ export const NetworkGraph = ({ data, loading, height = 500 }) => {
 
       <ForceGraph2D
         ref={fgRef}
-        graphData={data}
+        graphData={transformedData}
         width={dimensions.width}
         height={dimensions.height}
-        nodeLabel={(node) => node.id}
-        nodeColor={(node) => {
-          if (highlightNodes.has(node)) return '#3b82f6';
-          return '#6b7280';
-        }}
-        nodeRelSize={6}
+        nodeLabel={(node) => `
+          ${node.name}
+          Revenue: $${(node.revenue || 0).toFixed(2)}
+          Transactions: ${node.transactions || 0}
+        `}
+        nodeColor={getNodeColor}
+        nodeRelSize={getNodeSize}
         nodeCanvasObject={(node, ctx, globalScale) => {
-          const label = node.id;
+          const label = node.name;
           const fontSize = 12 / globalScale;
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillStyle = highlightNodes.has(node) ? '#3b82f6' : '#6b7280';
-          ctx.fillText(label, node.x, node.y + 8);
+          ctx.fillStyle = highlightNodes.has(node) ? '#3b82f6' : getNodeColor(node);
+          
+          // Draw node
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, getNodeSize(node), 0, 2 * Math.PI, false);
+          ctx.fill();
+          
+          // Draw label
+          if (globalScale > 0.5) {
+            ctx.fillStyle = '#374151';
+            ctx.fillText(label, node.x, node.y + getNodeSize(node) + fontSize);
+          }
         }}
-        linkColor={(link) => {
-          if (highlightLinks.has(link)) return '#3b82f6';
-          return '#9ca3af';
-        }}
-        linkWidth={(link) => (highlightLinks.has(link) ? 2 : 1)}
+        linkColor={getLinkColor}
+        linkWidth={(link) => (highlightLinks.has(link) ? 3 : link.value * 2)}
         onNodeHover={handleNodeHover}
         cooldownTime={1000}
         d3VelocityDecay={0.3}
         warmupTicks={20}
+        linkDirectionalArrowLength={3}
+        linkDirectionalArrowRelPos={1}
       />
 
       <div className="absolute bottom-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3">
         <div className="text-xs text-gray-600 dark:text-gray-400">
-          <div className="flex items-center mb-1">
+          <div className="flex items-center mb-2">
             <div className="w-3 h-3 rounded-full bg-gray-500 mr-2"></div>
-            <span>Product Node</span>
+            <span>Product Node (size = revenue)</span>
+          </div>
+          <div className="flex items-center mb-2">
+            <div className="w-8 h-0.5 bg-green-500 mr-2"></div>
+            <span>Strong Association (lift &gt; 1.5)</span>
           </div>
           <div className="flex items-center">
             <div className="w-8 h-0.5 bg-gray-400 mr-2"></div>
-            <span>Association Link</span>
+            <span>Weak Association</span>
           </div>
         </div>
       </div>
+
+      {/* Node info panel when hovering */}
+      {Array.from(highlightNodes).length > 0 && (
+        <div className="absolute top-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4 max-w-xs">
+          <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+            Connected Products
+          </h4>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {Array.from(highlightNodes).map((node, idx) => (
+              <div key={idx} className="text-sm">
+                <div className="font-medium text-gray-900 dark:text-white">
+                  {node.name}
+                </div>
+                <div className="text-gray-600 dark:text-gray-400">
+                  Revenue: ${(node.revenue || 0).toFixed(2)} • Transactions: {node.transactions || 0}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
