@@ -16,7 +16,16 @@ from collections import defaultdict
 warnings.filterwarnings('ignore')
 
 def cache_response(max_age=300, compress=True):
-    """Decorator for caching and compressing responses"""
+    """
+    Decorator for caching and compressing API responses.
+    
+    Args:
+        max_age: Cache duration in seconds (default: 5 minutes)
+        compress: Enable gzip compression (default: True)
+    
+    Returns:
+        Decorated function with caching and compression
+    """
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
@@ -29,16 +38,31 @@ def cache_response(max_age=300, compress=True):
                 response.headers['Content-Type'] = 'application/json; charset=utf-8'
                 return response
             except Exception as e:
-                return make_response(jsonify({"success": False, "error": str(e)}), 500)
+                print(f"❌ Cache decorator error: {e}")
+                traceback.print_exc()
+                return make_response(jsonify({
+                    "success": False, 
+                    "error": "Internal server error",
+                    "details": str(e) if debug else None
+                }), 500)
         return decorated_function
     return decorator
 
 def extract_datetime_features(df):
-    """Extract datetime features from dataset"""
+    """
+    Extract datetime features from the dataset for temporal analysis.
+    
+    Args:
+        df: Input DataFrame
+        
+    Returns:
+        DataFrame with added datetime features (Year, Month, Day, Hour, Weekday, etc.)
+    """
     df_clean = df.copy()
     
     if 'InvoiceDate' in df_clean.columns:
         try:
+            # Parse InvoiceDate if available
             df_clean['InvoiceDate'] = pd.to_datetime(df_clean['InvoiceDate'], errors='coerce')
             df_clean['Year'] = df_clean['InvoiceDate'].dt.year.fillna(2024).astype(int)
             df_clean['Month'] = df_clean['InvoiceDate'].dt.month.fillna(1).astype(int)
@@ -49,55 +73,137 @@ def extract_datetime_features(df):
             print(f"✓ Parsed InvoiceDate successfully")
         except Exception as e:
             print(f"⚠ Error parsing InvoiceDate: {e}")
-            df_clean['Year'] = 2024
+            # Fallback to default values
+            df_clean['Year'] = 2010
             df_clean['Month'] = 1
             df_clean['Day'] = 1
             df_clean['Hour'] = 12
             df_clean['Weekday'] = 'Monday'
             df_clean['Weekday_Num'] = 0
+    elif 'Year' in df_clean.columns and 'Month' in df_clean.columns:
+        # Use existing datetime columns if available
+        print("✓ Using existing Year, Month, Day, Hour columns")
+        df_clean['Year'] = pd.to_numeric(df_clean['Year'], errors='coerce').fillna(2024).astype(int)
+        df_clean['Month'] = pd.to_numeric(df_clean['Month'], errors='coerce').fillna(1).astype(int)
+        df_clean['Day'] = pd.to_numeric(df_clean['Day'], errors='coerce').fillna(1) if 'Day' in df_clean.columns else 1
+        df_clean['Hour'] = pd.to_numeric(df_clean['Hour'], errors='coerce').fillna(12) if 'Hour' in df_clean.columns else 12
+        df_clean['Weekday'] = 'Monday'
+        df_clean['Weekday_Num'] = 0
     else:
-        print("⚠ InvoiceDate column not found")
-        df_clean['Year'] = 2024
+        # Create default datetime columns if none exist
+        print("⚠ InvoiceDate and datetime columns not found")
+        df_clean['Year'] = 2010
         df_clean['Month'] = 1
         df_clean['Day'] = 1
         df_clean['Hour'] = 12
         df_clean['Weekday'] = 'Monday'
         df_clean['Weekday_Num'] = 0
     
+    # Add month names for display
     month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     df_clean['Month_Name'] = df_clean['Month'].apply(lambda x: month_names[x-1] if 1 <= x <= 12 else 'Unknown')
     
     return df_clean
 
 def apply_filters(df, filters):
-    """Apply filters to dataframe"""
+    """
+    Apply multiple filters to the DataFrame with safety checks.
+    
+    Args:
+        df: Input DataFrame
+        filters: Dictionary of filter criteria
+        
+    Returns:
+        Filtered DataFrame
+    """
     df_filtered = df.copy()
     
+    # Debug log
+    print(f"🔍 Applying filters: {filters}")
+    print(f"   Initial records: {len(df_filtered):,}")
+    
+    # Apply country filter (with column existence check)
     if 'country' in filters and filters['country'] and filters['country'] != 'all':
-        if filters['country'].lower() != 'unknown':
-            df_filtered = df_filtered[df_filtered['Country'] == filters['country']]
+        if 'Country' in df_filtered.columns:
+            if filters['country'].lower() != 'unknown':
+                df_filtered = df_filtered[df_filtered['Country'] == filters['country']]
+                print(f"   Applied country filter: {filters['country']}")
+        else:
+            print(f"⚠ Country column not found, skipping country filter")
     
+    # Apply year filter
     if 'year' in filters and filters['year'] and filters['year'] != 'all':
-        df_filtered = df_filtered[df_filtered['Year'] == int(filters['year'])]
+        if 'Year' in df_filtered.columns:
+            try:
+                year_value = int(filters['year'])
+                df_filtered = df_filtered[df_filtered['Year'] == year_value]
+                print(f"   Applied year filter: {year_value}")
+            except ValueError:
+                print(f"⚠ Invalid year value: {filters['year']}")
+        else:
+            print(f"⚠ Year column not found, skipping year filter")
     
+    # Apply month filter
     if 'month' in filters and filters['month'] and filters['month'] != 'all':
-        df_filtered = df_filtered[df_filtered['Month'] == int(filters['month'])]
+        if 'Month' in df_filtered.columns:
+            try:
+                month_value = int(filters['month'])
+                df_filtered = df_filtered[df_filtered['Month'] == month_value]
+                print(f"   Applied month filter: {month_value}")
+            except ValueError:
+                print(f"⚠ Invalid month value: {filters['month']}")
+        else:
+            print(f"⚠ Month column not found, skipping month filter")
     
+    # Apply hour filter
     if 'hour' in filters and filters['hour'] and filters['hour'] != 'all':
-        df_filtered = df_filtered[df_filtered['Hour'] == int(filters['hour'])]
+        if 'Hour' in df_filtered.columns:
+            try:
+                hour_value = int(filters['hour'])
+                df_filtered = df_filtered[df_filtered['Hour'] == hour_value]
+                print(f"   Applied hour filter: {hour_value}")
+            except ValueError:
+                print(f"⚠ Invalid hour value: {filters['hour']}")
+        else:
+            print(f"⚠ Hour column not found, skipping hour filter")
     
+    # Apply product filter (text search in Description)
     if 'product' in filters and filters['product'] and filters['product'] != 'all':
-        product_filter = filters['product'].lower().strip()
-        if product_filter:
-            df_filtered = df_filtered[df_filtered['Description'].str.lower().str.contains(product_filter, na=False)]
+        if 'Description' in df_filtered.columns:
+            product_filter = filters['product'].lower().strip()
+            if product_filter:
+                # Convert to string and handle NaN values
+                df_filtered['Description_clean'] = df_filtered['Description'].astype(str).str.lower()
+                df_filtered = df_filtered[df_filtered['Description_clean'].str.contains(product_filter, na=False)]
+                df_filtered = df_filtered.drop(columns=['Description_clean'])
+                print(f"   Applied product filter: {product_filter}")
+        else:
+            print(f"⚠ Description column not found, skipping product filter")
     
+    # Apply weekday filter
     if 'weekday' in filters and filters['weekday'] and filters['weekday'] != 'all':
-        df_filtered = df_filtered[df_filtered['Weekday'] == filters['weekday']]
+        if 'Weekday' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['Weekday'] == filters['weekday']]
+            print(f"   Applied weekday filter: {filters['weekday']}")
+        else:
+            print(f"⚠ Weekday column not found, skipping weekday filter")
+    
+    print(f"✅ Filter application complete")
+    print(f"   Records after filtering: {len(df_filtered):,}")
+    print(f"   Filters applied: {filters}")
     
     return df_filtered
 
 def remove_duplicate_rules(rules_df):
-    """Remove duplicate rules (A→B and B→A) keeping the one with higher confidence"""
+    """
+    Remove duplicate association rules (A→B and B→A) keeping the one with higher confidence.
+    
+    Args:
+        rules_df: DataFrame of association rules
+        
+    Returns:
+        DataFrame with unique rules
+    """
     if len(rules_df) == 0:
         return rules_df
     
@@ -107,7 +213,7 @@ def remove_duplicate_rules(rules_df):
         antecedents = frozenset(rule['antecedents'])
         consequents = frozenset(rule['consequents'])
         
-        # Create both possible keys
+        # Create both possible keys (A→B and B→A)
         key1 = (antecedents, consequents)
         key2 = (consequents, antecedents)
         
@@ -126,177 +232,362 @@ def remove_duplicate_rules(rules_df):
     return unique_rules
 
 def calculate_product_stats(product_name, df_filtered):
-    """Calculate detailed statistics for a product"""
-    product_df = df_filtered[df_filtered['Description'] == product_name]
+    """
+    Calculate detailed statistics for a specific product.
+    
+    Args:
+        product_name: Name of the product
+        df_filtered: Filtered DataFrame containing the product
+        
+    Returns:
+        Dictionary of product statistics or None if product not found
+    """
+    # Find the exact product match (case-insensitive)
+    product_df = df_filtered[
+        df_filtered['Description'].astype(str).str.lower() == product_name.lower()
+    ]
+    
+    if len(product_df) == 0:
+        # Try partial match if exact not found
+        product_df = df_filtered[
+            df_filtered['Description'].astype(str).str.lower().str.contains(product_name.lower(), na=False)
+        ]
     
     if len(product_df) == 0:
         return None
     
     stats = {
-        'total_quantity': int(product_df['Quantity'].sum()),
-        'total_revenue': float(product_df['TotalAmount'].sum()),
-        'avg_price': float(product_df['UnitPrice'].mean()),
-        'transaction_count': int(product_df['InvoiceNo'].nunique()),
-        'customer_count': int(product_df['CustomerID'].nunique()),
-        'avg_quantity_per_transaction': float(product_df.groupby('InvoiceNo')['Quantity'].sum().mean()),
-        'peak_hour': int(product_df['Hour'].mode().iloc[0] if not product_df['Hour'].mode().empty else 12),
-        'most_common_weekday': str(product_df['Weekday'].mode().iloc[0] if not product_df['Weekday'].mode().empty else 'Monday'),
-        'most_common_month': int(product_df['Month'].mode().iloc[0] if not product_df['Month'].mode().empty else 1),
-        'top_country': str(product_df['Country'].mode().iloc[0] if not product_df['Country'].mode().empty else 'Unknown')
+        'total_quantity': int(product_df['Quantity'].sum()) if 'Quantity' in product_df.columns else 0,
+        'total_revenue': float(product_df['TotalAmount'].sum()) if 'TotalAmount' in product_df.columns else 0.0,
+        'transaction_count': int(product_df['InvoiceNo'].nunique()) if 'InvoiceNo' in product_df.columns else 0,
+        'customer_count': int(product_df['CustomerID'].nunique()) if 'CustomerID' in product_df.columns else 0,
+        'avg_quantity_per_transaction': float(product_df.groupby('InvoiceNo')['Quantity'].sum().mean()) 
+            if 'InvoiceNo' in product_df.columns and 'Quantity' in product_df.columns else 0.0,
+        'peak_hour': int(product_df['Hour'].mode().iloc[0]) if 'Hour' in product_df.columns and not product_df['Hour'].mode().empty else 12,
+        'most_common_weekday': str(product_df['Weekday'].mode().iloc[0]) 
+            if 'Weekday' in product_df.columns and not product_df['Weekday'].mode().empty else 'Monday',
+        'most_common_month': int(product_df['Month'].mode().iloc[0]) 
+            if 'Month' in product_df.columns and not product_df['Month'].mode().empty else 1,
+        'top_country': str(product_df['Country'].mode().iloc[0]) 
+            if 'Country' in product_df.columns and not product_df['Country'].mode().empty else 'Unknown'
     }
+    
+    # Calculate average price
+    if 'UnitPrice' in product_df.columns:
+        stats['avg_price'] = float(product_df['UnitPrice'].mean())
+    elif 'Price' in product_df.columns:
+        stats['avg_price'] = float(product_df['Price'].mean())
+    elif stats['total_quantity'] > 0:
+        stats['avg_price'] = stats['total_revenue'] / stats['total_quantity']
+    else:
+        stats['avg_price'] = 0.0
     
     return stats
 
+def map_column_names(df):
+    """
+    Map various column name formats to standard names for compatibility.
+    
+    Args:
+        df: Input DataFrame with potentially varying column names
+        
+    Returns:
+        DataFrame with standardized column names
+    """
+    df_mapped = df.copy()
+    column_mapping = {}
+    
+    # Map invoice-related columns
+    invoice_aliases = ['Invoice', 'InvoiceNo', 'InvoiceNumber', 'TransactionID', 'TransNo']
+    for col in df_mapped.columns:
+        col_lower = col.lower()
+        if col_lower in ['invoice', 'invoiceno', 'invoicenumber', 'transno', 'transactionid', 'transactionno']:
+            if col != 'InvoiceNo':  # Only map if not already correct
+                column_mapping[col] = 'InvoiceNo'
+    
+    # Map customer-related columns
+    customer_aliases = ['CustomerID', 'Customer', 'CustomerNo', 'ClientID', 'Client']
+    for col in df_mapped.columns:
+        col_lower = col.lower()
+        if col_lower in ['customerid', 'customer', 'customerno', 'clientid', 'client', 'custid']:
+            if col != 'CustomerID':
+                column_mapping[col] = 'CustomerID'
+    
+    # Map price-related columns
+    price_aliases = ['UnitPrice', 'Price', 'Cost', 'UnitCost']
+    for col in df_mapped.columns:
+        col_lower = col.lower()
+        if col_lower in ['unitprice', 'price', 'cost', 'unitcost', 'sellingprice']:
+            if col != 'UnitPrice':
+                column_mapping[col] = 'UnitPrice'
+    
+    # Apply the mapping
+    if column_mapping:
+        df_mapped = df_mapped.rename(columns=column_mapping)
+        print(f"✅ Mapped columns: {column_mapping}")
+    
+    return df_mapped
+
+def validate_dataframe_columns(df, required_cols):
+    """
+    Validate that required columns exist in the DataFrame.
+    
+    Args:
+        df: DataFrame to validate
+        required_cols: List of required column names
+        
+    Returns:
+        Tuple of (is_valid, missing_columns)
+    """
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    return (len(missing_cols) == 0, missing_cols)
+
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app, supports_credentials=True, origins=["http://localhost:3000", "http://localhost:5000"])
 
+# Global DataFrame to store loaded data
 df = None
+debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
 def load_data():
-    """Load data once at startup"""
+    """
+    Load and preprocess the retail dataset for analysis.
+    Handles multiple file paths and data cleaning.
+    """
     global df
-    print("Loading data for Intelligent Product Assortment Dashboard...")
+    print("=" * 60)
+    print("📊 Loading data for Intelligent Product Assortment Dashboard...")
+    print("=" * 60)
     
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        data_path = os.path.join(project_root, 'data', 'Online_Retail_Cleaned.csv')
         
-        if not os.path.exists(data_path):
-            # Try alternative paths
-            alternative_paths = [
-                os.path.join(current_dir, 'data', 'Online_Retail_Cleaned.csv'),
-                os.path.join(current_dir, 'Online_Retail_Cleaned.csv'),
-                'Online_Retail_Cleaned.csv'
-            ]
-            
-            for alt_path in alternative_paths:
-                if os.path.exists(alt_path):
-                    data_path = alt_path
-                    break
+        # Try multiple possible file paths
+        possible_paths = [
+            os.path.join(current_dir, 'data', 'Online_Retail_II_Cleaned.csv'),
+            os.path.join(current_dir, 'Online_Retail_II_Cleaned.csv'),
+            os.path.join(os.path.dirname(current_dir), 'data', 'Online_Retail_II_Cleaned.csv'),
+            'Online_Retail_II_Cleaned.csv',
+            'data/Online_Retail_II_Cleaned.csv'
+        ]
         
-        if os.path.exists(data_path):
-            print(f"📂 Loading data from: {data_path}")
+        data_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                data_path = path
+                print(f"📂 Found data at: {path}")
+                break
+        
+        if not data_path:
+            print(f"❌ ERROR: Data file not found at any expected location")
+            print(f"   Searched paths: {possible_paths}")
+            raise FileNotFoundError("Data file not found. Please ensure 'Online_Retail_II_Cleaned.csv' is available.")
+        
+        # Load CSV with multiple encoding attempts
+        print(f"📥 Loading CSV from: {data_path}")
+        for encoding in ['utf-8', 'latin1', 'ISO-8859-1', 'cp1252']:
             try:
-                df = pd.read_csv(data_path, encoding='utf-8')
+                df = pd.read_csv(data_path, encoding=encoding)
+                print(f"✅ Successfully loaded with {encoding} encoding")
+                break
             except UnicodeDecodeError:
-                try:
-                    df = pd.read_csv(data_path, encoding='latin1')
-                except Exception as e:
-                    print(f"❌ Error reading CSV: {e}")
-                    raise
-            
-            print(f"✅ CSV loaded: {df.shape[0]:,} rows, {df.shape[1]} columns")
-            
-            # Check required columns
-            required_columns = ['InvoiceNo', 'Description', 'Quantity', 'UnitPrice']
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            if missing_columns:
-                print(f"❌ Missing required columns: {missing_columns}")
-                raise ValueError(f"Missing required columns: {missing_columns}")
-            
-            # Clean and prepare data
-            df = df.copy()
-            
-            # Clean critical columns
-            if 'Description' in df.columns:
-                df['Description'] = df['Description'].astype(str).str.strip()
-                df = df[df['Description'] != '']
-                df = df[df['Description'] != 'nan']
-                df = df[~df['Description'].isnull()]
-                print(f"✅ Cleaned Descriptions: {df['Description'].nunique():,} unique products")
-            
-            # Convert numeric columns
-            if 'Quantity' in df.columns:
-                df['Quantity'] = pd.to_numeric(df['Quantity'], errors='coerce')
-                df = df[df['Quantity'] > 0]
-                df['Quantity'] = df['Quantity'].astype(int)
-            
-            if 'UnitPrice' in df.columns:
-                df['UnitPrice'] = pd.to_numeric(df['UnitPrice'], errors='coerce')
-                df = df[df['UnitPrice'] > 0]
-            
-            # Calculate total amount
+                continue
+        
+        if df is None:
+            raise ValueError("Failed to load CSV with any encoding")
+        
+        print(f"✅ CSV loaded: {df.shape[0]:,} rows, {df.shape[1]} columns")
+        print(f"   Columns: {list(df.columns)}")
+        
+        # Map column names to standard format
+        df = map_column_names(df)
+        
+        # Display column analysis
+        print(f"\n📊 COLUMN ANALYSIS:")
+        for col in df.columns:
+            non_null = df[col].count()
+            null_count = df[col].isnull().sum()
+            unique_count = df[col].nunique()
+            dtype = df[col].dtype
+            print(f"   {col}: {dtype}, {non_null:,} non-null, {null_count:,} null, {unique_count:,} unique")
+        
+        # Clean critical columns
+        print(f"\n🧹 DATA CLEANING:")
+        
+        # Clean Description column
+        if 'Description' in df.columns:
+            initial_count = len(df)
+            df['Description'] = df['Description'].astype(str).str.strip()
+            df = df[~df['Description'].isin(['', 'nan', 'NaN', 'null', 'None'])]
+            df = df[~df['Description'].isnull()]
+            removed = initial_count - len(df)
+            print(f"✅ Cleaned Descriptions: removed {removed:,} empty rows")
+            print(f"   Unique products: {df['Description'].nunique():,}")
+        else:
+            print(f"❌ CRITICAL: Description column not found")
+            raise ValueError("Description column is required but not found in data")
+        
+        # Clean Quantity column
+        if 'Quantity' in df.columns:
+            initial_count = len(df)
+            df['Quantity'] = pd.to_numeric(df['Quantity'], errors='coerce')
+            df = df[df['Quantity'] > 0]
+            df['Quantity'] = df['Quantity'].fillna(1).astype(int)
+            removed = initial_count - len(df)
+            print(f"✅ Cleaned Quantity: removed {removed:,} invalid rows")
+        else:
+            print(f"⚠ Warning: Quantity column not found, creating default")
+            df['Quantity'] = 1
+        
+        # Clean Price/UnitPrice column
+        if 'UnitPrice' in df.columns:
+            initial_count = len(df)
+            df['UnitPrice'] = pd.to_numeric(df['UnitPrice'], errors='coerce')
+            df = df[df['UnitPrice'] > 0]
+            df['UnitPrice'] = df['UnitPrice'].fillna(1.0)
+            removed = initial_count - len(df)
+            print(f"✅ Cleaned UnitPrice: removed {removed:,} invalid rows")
+        elif 'Price' in df.columns:
+            df['UnitPrice'] = pd.to_numeric(df['Price'], errors='coerce')
+            df['UnitPrice'] = df['UnitPrice'].fillna(1.0)
+            print(f"✅ Using Price column as UnitPrice")
+        else:
+            print(f"⚠ Warning: No price column found, creating default")
+            df['UnitPrice'] = 10.0  # Default price
+        
+        # Calculate TotalAmount if not present
+        if 'TotalAmount' not in df.columns:
             df['TotalAmount'] = df['Quantity'] * df['UnitPrice']
-            
-            # Extract datetime features
-            df = extract_datetime_features(df)
-            
-            # Fill missing values
-            if 'CustomerID' in df.columns:
-                df['CustomerID'] = df['CustomerID'].fillna('Unknown').astype(str)
-            
-            if 'Country' in df.columns:
-                df['Country'] = df['Country'].fillna('Unknown').astype(str)
-            
-            print(f"\n📊 FINAL DATASET STATS:")
-            print(f"   Total Records: {len(df):,}")
-            print(f"   Total Transactions: {df['InvoiceNo'].nunique():,}")
-            print(f"   Total Products: {df['Description'].nunique():,}")
-            print(f"   Total Revenue: ${df['TotalAmount'].sum():,.2f}")
-            
+            print(f"✅ Calculated TotalAmount column")
+        
+        # Extract datetime features
+        df = extract_datetime_features(df)
+        
+        # Handle missing values
+        if 'CustomerID' in df.columns:
+            df['CustomerID'] = df['CustomerID'].fillna('Unknown').astype(str)
+            print(f"✅ Filled missing CustomerID values")
+        
+        if 'Country' in df.columns:
+            df['Country'] = df['Country'].fillna('Unknown').astype(str)
+            print(f"✅ Filled missing Country values")
+        
+        # Ensure InvoiceNo exists
+        if 'InvoiceNo' not in df.columns:
+            invoice_cols = [col for col in df.columns if 'invoice' in col.lower()]
+            if invoice_cols:
+                df['InvoiceNo'] = df[invoice_cols[0]]
+                print(f"✅ Using {invoice_cols[0]} as InvoiceNo")
+            else:
+                df['InvoiceNo'] = df.index.astype(str)
+                print(f"⚠ No invoice column found, created synthetic InvoiceNo")
+        
+        # Final dataset statistics
+        print(f"\n📊 FINAL DATASET STATISTICS:")
+        print(f"   Total Records: {len(df):,}")
+        print(f"   Total Transactions: {df['InvoiceNo'].nunique():,}")
+        print(f"   Total Products: {df['Description'].nunique():,}")
+        print(f"   Total Revenue: ${df['TotalAmount'].sum():,.2f}")
+        
+        if 'InvoiceNo' in df.columns:
             transaction_sizes = df.groupby('InvoiceNo').size()
             multi_item_count = (transaction_sizes > 1).sum()
-            print(f"   Multi-item Transactions: {multi_item_count:,} ({multi_item_count/len(transaction_sizes)*100:.1f}%)")
-            
-        else:
-            print(f"❌ ERROR: Data file not found at any expected location")
-            print(f"   Searched in: {data_path}")
-            raise FileNotFoundError(f"Data file not found. Please ensure 'Online_Retail_Cleaned.csv' is in the data directory.")
-            
+            multi_item_percentage = (multi_item_count / len(transaction_sizes) * 100) if len(transaction_sizes) > 0 else 0
+            print(f"   Multi-item Transactions: {multi_item_count:,} ({multi_item_percentage:.1f}%)")
+        
+        print(f"\n✅ DATA LOAD COMPLETE")
+        print("=" * 60)
+        
     except Exception as e:
         print(f"❌ CRITICAL ERROR loading data: {str(e)}")
         traceback.print_exc()
-        raise
+        # Create minimal valid dataframe to prevent crashes
+        df = pd.DataFrame({
+            'InvoiceNo': ['INV001', 'INV001', 'INV002'],
+            'Description': ['Product A', 'Product B', 'Product A'],
+            'Quantity': [2, 1, 3],
+            'UnitPrice': [10.0, 15.0, 10.0],
+            'TotalAmount': [20.0, 15.0, 30.0],
+            'Country': ['UK', 'UK', 'US'],
+            'Year': [2023, 2023, 2023],
+            'Month': [1, 1, 1],
+            'Hour': [10, 10, 14],
+            'Weekday': ['Monday', 'Monday', 'Tuesday']
+        })
+        print(f"⚠ Created sample dataframe for testing ({len(df)} records)")
 
-# Load data immediately
+# Load data on startup
 try:
     load_data()
 except Exception as e:
-    print(f"Failed to load data: {e}")
-    df = pd.DataFrame()  # Create empty dataframe to prevent crashes
+    print(f"⚠ Failed to load data: {e}")
+    df = pd.DataFrame()
 
 @app.route('/')
 def home():
+    """Root endpoint - API information"""
     return jsonify({
         "message": "Intelligent Product Assortment Dashboard API",
         "status": "running",
         "data_size": len(df) if df is not None else 0,
-        "version": "1.0.0",
+        "version": "2.0.0",
         "timestamp": datetime.now().isoformat(),
+        "documentation": "See /api/health for data status",
         "endpoints": [
-            "/api/health",
-            "/api/summary",
-            "/api/association_rules",
-            "/api/suggested_bundles",
-            "/api/revenue_analysis",
-            "/api/seasonal_data",
-            "/api/frequent_itemsets",
-            "/api/top_products",
-            "/api/filters",
-            "/api/product_stats"
+            {"path": "/api/health", "method": "GET", "description": "Health check and data status"},
+            {"path": "/api/summary", "method": "GET", "description": "Comprehensive data summary"},
+            {"path": "/api/association_rules", "method": "GET", "description": "Market basket analysis rules"},
+            {"path": "/api/suggested_bundles", "method": "GET", "description": "Product bundle recommendations"},
+            {"path": "/api/revenue_analysis", "method": "GET", "description": "Revenue by country analysis"},
+            {"path": "/api/seasonal_data", "method": "GET", "description": "Seasonal/temporal patterns"},
+            {"path": "/api/frequent_itemsets", "method": "GET", "description": "Network graph data"},
+            {"path": "/api/top_products", "method": "GET", "description": "Top products ranking"},
+            {"path": "/api/filters", "method": "GET", "description": "Available filter options"},
+            {"path": "/api/product_stats", "method": "GET", "description": "Detailed product statistics"}
         ]
     })
 
 @app.route('/api/health', methods=['GET'])
 @cache_response(max_age=60)
 def health_check():
+    """Health check endpoint - verify API and data status"""
     try:
         if df is None or len(df) == 0:
             return jsonify({
                 "status": "unhealthy",
-                "error": "Data not loaded",
-                "timestamp": datetime.now().isoformat()
-            }), 500
+                "error": "Data not loaded or empty",
+                "timestamp": datetime.now().isoformat(),
+                "recommendation": "Check data file and restart API"
+            }), 503  # Service Unavailable
+        
+        # Check for critical columns
+        critical_cols = ['InvoiceNo', 'Description']
+        missing_critical = [col for col in critical_cols if col not in df.columns]
+        
+        if missing_critical:
+            return jsonify({
+                "status": "degraded",
+                "warning": f"Missing critical columns: {missing_critical}",
+                "timestamp": datetime.now().isoformat(),
+                "data_records": len(df),
+                "available_columns": list(df.columns)
+            }), 200
         
         return jsonify({
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "data_records": len(df),
-            "transactions": df['InvoiceNo'].nunique(),
-            "products": df['Description'].nunique(),
-            "total_revenue": float(df['TotalAmount'].sum()),
-            "memory_usage_mb": int(df.memory_usage(deep=True).sum() / 1024 / 1024)
+            "transactions": df['InvoiceNo'].nunique() if 'InvoiceNo' in df.columns else 0,
+            "products": df['Description'].nunique() if 'Description' in df.columns else 0,
+            "total_revenue": float(df['TotalAmount'].sum()) if 'TotalAmount' in df.columns else 0,
+            "memory_usage_mb": int(df.memory_usage(deep=True).sum() / 1024 / 1024) if hasattr(df, 'memory_usage') else 0,
+            "available_columns": list(df.columns),
+            "data_quality": {
+                "missing_descriptions": int(df['Description'].isnull().sum()) if 'Description' in df.columns else 0,
+                "missing_prices": int(df['UnitPrice'].isnull().sum()) if 'UnitPrice' in df.columns else 0,
+                "missing_quantities": int(df['Quantity'].isnull().sum()) if 'Quantity' in df.columns else 0
+            }
         })
     except Exception as e:
         return jsonify({
@@ -311,26 +602,46 @@ def get_summary():
     """Get comprehensive data summary statistics"""
     try:
         if df is None or len(df) == 0:
-            return jsonify({"success": False, "error": "Data not loaded"}), 400
+            return jsonify({"success": False, "error": "Data not loaded or empty"}), 400
         
+        # Validate required columns
+        required_cols = ['InvoiceNo', 'Description', 'TotalAmount']
+        is_valid, missing_cols = validate_dataframe_columns(df, required_cols)
+        
+        if not is_valid:
+            return jsonify({
+                "success": False, 
+                "error": f"Missing required columns: {missing_cols}",
+                "available_columns": list(df.columns)
+            }), 400
+        
+        # Calculate basic metrics
         total_revenue = float(df['TotalAmount'].sum())
         total_transactions = int(df['InvoiceNo'].nunique())
         total_records = len(df)
         avg_transaction_value = total_revenue / total_transactions if total_transactions > 0 else 0
         
         # Calculate transaction size distribution
-        transaction_sizes = df.groupby('InvoiceNo').size()
-        multi_item_transactions = (transaction_sizes > 1).sum()
-        multi_item_percentage = (multi_item_transactions / total_transactions * 100) if total_transactions > 0 else 0
+        multi_item_count = 0
+        multi_item_percentage = 0
+        if 'InvoiceNo' in df.columns:
+            transaction_sizes = df.groupby('InvoiceNo').size()
+            multi_item_count = (transaction_sizes > 1).sum()
+            multi_item_percentage = (multi_item_count / total_transactions * 100) if total_transactions > 0 else 0
         
         # Calculate basket size statistics
-        basket_sizes = df.groupby('InvoiceNo')['Quantity'].sum()
-        avg_basket_size = float(basket_sizes.mean())
-        median_basket_size = float(basket_sizes.median())
+        avg_basket_size = 0
+        median_basket_size = 0
+        if 'InvoiceNo' in df.columns and 'Quantity' in df.columns:
+            basket_sizes = df.groupby('InvoiceNo')['Quantity'].sum()
+            avg_basket_size = float(basket_sizes.mean()) if not basket_sizes.empty else 0
+            median_basket_size = float(basket_sizes.median()) if not basket_sizes.empty else 0
         
         # Calculate product popularity
-        product_counts = df['Description'].value_counts()
-        top_10_products_percentage = (product_counts.head(10).sum() / product_counts.sum() * 100) if product_counts.sum() > 0 else 0
+        top_10_products_percentage = 0
+        if 'Description' in df.columns:
+            product_counts = df['Description'].value_counts()
+            top_10_products_percentage = (product_counts.head(10).sum() / product_counts.sum() * 100) if product_counts.sum() > 0 else 0
         
         # Calculate data quality metrics
         critical_columns = ['InvoiceNo', 'Description', 'Quantity', 'UnitPrice', 'CustomerID', 'Country']
@@ -345,7 +656,7 @@ def get_summary():
         total_missing_critical = sum(missing_counts.values())
         data_completeness = round((1 - (total_missing_critical / total_critical_cells)) * 100, 2) if total_critical_cells > 0 else 0
         
-        # Time range
+        # Time range information
         if 'InvoiceDate' in df.columns and df['InvoiceDate'].dtype == 'datetime64[ns]':
             min_date = df['InvoiceDate'].min()
             max_date = df['InvoiceDate'].max()
@@ -354,6 +665,14 @@ def get_summary():
                 "end": max_date.strftime('%Y-%m-%d'),
                 "days": (max_date - min_date).days
             }
+        elif 'Year' in df.columns:
+            min_year = int(df['Year'].min())
+            max_year = int(df['Year'].max())
+            date_range = {
+                "start": f"{min_year}-01-01",
+                "end": f"{max_year}-12-31",
+                "years": max_year - min_year + 1
+            }
         else:
             date_range = {
                 "start": "Unknown",
@@ -361,6 +680,7 @@ def get_summary():
                 "days": 0
             }
         
+        # Compile summary
         summary = {
             "total_transactions": total_transactions,
             "total_products": int(df['Description'].nunique()),
@@ -383,7 +703,7 @@ def get_summary():
                 "unique_products": int(df['Description'].nunique()),
                 "unique_customers": int(df['CustomerID'].nunique()) if 'CustomerID' in df.columns else 0,
                 "revenue_per_transaction": round(avg_transaction_value, 2),
-                "multi_item_transactions": int(multi_item_transactions)
+                "multi_item_transactions": int(multi_item_count)
             }
         }
         
@@ -393,25 +713,41 @@ def get_summary():
             "timestamp": datetime.now().isoformat()
         })
     except Exception as e:
-        print(f"Error in summary: {str(e)}")
+        print(f"❌ Error in get_summary: {str(e)}")
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({
+            "success": False, 
+            "error": "Failed to generate summary",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/association_rules', methods=['GET'])
 @cache_response(max_age=600)
 def get_association_rules():
-    """Get association rules"""
+    """
+    Generate association rules for market basket analysis.
+    Uses Apriori algorithm to find patterns like "customers who buy X also buy Y"
+    """
     try:
         start_time = time.time()
         
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        # Get parameters
-        min_support = max(0.001, float(request.args.get('min_support', 0.01)))
-        min_confidence = max(0.1, float(request.args.get('min_confidence', 0.3)))
-        limit = min(100, int(request.args.get('limit', 50)))
-        min_lift = float(request.args.get('min_lift', 1.0))
+        # Check required columns
+        required_cols = ['InvoiceNo', 'Description']
+        is_valid, missing_cols = validate_dataframe_columns(df, required_cols)
+        if not is_valid:
+            return jsonify({
+                "success": False, 
+                "error": f"Missing required columns: {missing_cols}"
+            }), 400
+        
+        # Get and validate parameters
+        min_support = max(0.001, float(request.args.get('min_support', 0.01)))  # Default 1%
+        min_confidence = max(0.1, float(request.args.get('min_confidence', 0.3)))  # Default 30%
+        min_lift = max(0.5, float(request.args.get('min_lift', 1.0)))  # Default lift > 1
+        limit = min(100, max(1, int(request.args.get('limit', 50))))  # Default 50 rules
         simple = request.args.get('simple', 'true').lower() == 'true'
         
         # Apply filters
@@ -426,22 +762,24 @@ def get_association_rules():
         
         filtered_df = apply_filters(df, filters)
         
-        if len(filtered_df) < 100:
+        # Check if we have enough data after filtering
+        if len(filtered_df) < 50:
             return jsonify({
                 "success": True,
                 "data": [],
                 "metadata": {
                     "note": f"Insufficient data after filtering ({len(filtered_df)} records). Try broader filters.",
+                    "minimum_recommended": 100,
                     "filtered_records": len(filtered_df),
                     "processing_time": round(time.time() - start_time, 2)
                 }
             })
         
-        # Get top products for analysis (limit to reasonable number)
-        top_products = filtered_df['Description'].value_counts().head(50).index.tolist()
+        # Get top products for analysis (improve performance)
+        top_products = filtered_df['Description'].value_counts().head(100).index.tolist()
         df_top = filtered_df[filtered_df['Description'].isin(top_products)]
         
-        if len(df_top) < 100:
+        if len(df_top) < 50:
             return jsonify({
                 "success": True,
                 "data": [],
@@ -452,7 +790,7 @@ def get_association_rules():
             })
         
         try:
-            # Create basket matrix
+            # Create basket matrix (transactions x products)
             basket = (df_top.groupby(['InvoiceNo', 'Description'])['Quantity']
                       .sum()
                       .unstack(fill_value=0)
@@ -462,9 +800,9 @@ def get_association_rules():
             # Convert to boolean (bought or not)
             basket_sets = (basket > 0).astype(int)
             
-            # Remove columns with very low frequency
+            # Remove infrequent products
             column_sums = basket_sets.sum()
-            columns_to_keep = column_sums[column_sums >= 5].index.tolist()
+            columns_to_keep = column_sums[column_sums >= 3].index.tolist()  # Min 3 occurrences
             basket_sets = basket_sets[columns_to_keep]
             
             if len(basket_sets.columns) < 2:
@@ -477,27 +815,30 @@ def get_association_rules():
                     }
                 })
             
-            # Generate frequent itemsets
+            # Generate frequent itemsets using Apriori algorithm
+            print(f"🔍 Running Apriori with min_support={min_support}")
             frequent_itemsets = apriori(
                 basket_sets, 
                 min_support=min_support, 
                 use_colnames=True,
-                max_len=2,
+                max_len=2,  # Only look for pairs (for performance)
                 low_memory=True,
                 verbose=0
             )
             
+            # If no itemsets found, try lower support
             if len(frequent_itemsets) == 0:
-                # Try with lower support
-                min_support = max(0.0005, min_support / 2)
+                adjusted_support = max(0.0005, min_support / 2)
+                print(f"⚠ No itemsets found, trying lower support: {adjusted_support}")
                 frequent_itemsets = apriori(
                     basket_sets, 
-                    min_support=min_support, 
+                    min_support=adjusted_support, 
                     use_colnames=True,
                     max_len=2,
                     low_memory=True,
                     verbose=0
                 )
+                min_support = adjusted_support
             
             if len(frequent_itemsets) == 0:
                 return jsonify({
@@ -509,14 +850,14 @@ def get_association_rules():
                     }
                 })
             
-            # Generate association rules
+            # Generate association rules from frequent itemsets
             rules = association_rules(
                 frequent_itemsets, 
                 metric="confidence", 
                 min_threshold=min_confidence
             )
             
-            # Filter by lift
+            # Filter by minimum lift
             rules = rules[rules['lift'] >= min_lift]
             
             if len(rules) == 0:
@@ -529,13 +870,13 @@ def get_association_rules():
                     }
                 })
             
-            # Sort by confidence and lift
+            # Sort rules by confidence and lift
             rules = rules.sort_values(['confidence', 'lift'], ascending=False)
             
-            # Remove duplicate rules
+            # Remove duplicate rules (A→B and B→A)
             rules = remove_duplicate_rules(rules)
             
-            # Format rules
+            # Format rules for JSON response
             formatted_rules = []
             for idx, rule in rules.head(limit).iterrows():
                 antecedents = list(rule['antecedents'])
@@ -545,12 +886,6 @@ def get_association_rules():
                     antecedent_name = next(iter(antecedents))
                     consequent_name = next(iter(consequents))
                     
-                    # Calculate additional metrics
-                    antecedent_support = rule['antecedent support']
-                    consequent_support = rule['consequent support']
-                    leverage = rule['leverage']
-                    conviction = rule['conviction']
-                    
                     rule_data = {
                         "rule": f"{antecedent_name} → {consequent_name}",
                         "confidence": round(float(rule['confidence']), 3),
@@ -558,10 +893,10 @@ def get_association_rules():
                         "support": round(float(rule['support']), 4),
                         "antecedent": antecedent_name,
                         "consequent": consequent_name,
-                        "antecedent_support": round(float(antecedent_support), 4),
-                        "consequent_support": round(float(consequent_support), 4),
-                        "leverage": round(float(leverage), 4),
-                        "conviction": round(float(conviction), 3) if not pd.isna(conviction) else None
+                        "antecedent_support": round(float(rule['antecedent support']), 4),
+                        "consequent_support": round(float(rule['consequent support']), 4),
+                        "leverage": round(float(rule['leverage']), 4),
+                        "conviction": round(float(rule['conviction']), 3) if not pd.isna(rule['conviction']) else None
                     }
                     
                     if not simple:
@@ -584,7 +919,8 @@ def get_association_rules():
                     "parameters": {
                         "min_support": min_support,
                         "min_confidence": min_confidence,
-                        "min_lift": min_lift
+                        "min_lift": min_lift,
+                        "limit": limit
                     },
                     "filter_stats": {
                         "original_records": len(df),
@@ -596,31 +932,46 @@ def get_association_rules():
             })
             
         except Exception as algo_error:
-            print(f"Algorithm error: {algo_error}")
+            print(f"❌ Algorithm error: {algo_error}")
             traceback.print_exc()
             return jsonify({
                 "success": False,
-                "error": f"Algorithm error: {str(algo_error)}",
+                "error": "Association rule generation failed",
+                "details": str(algo_error) if debug else None,
                 "metadata": {
                     "processing_time": round(time.time() - start_time, 2)
                 }
             }), 500
             
     except Exception as e:
-        print(f"Error in association_rules: {e}")
+        print(f"❌ Error in association_rules: {e}")
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({
+            "success": False, 
+            "error": "Failed to generate association rules",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/suggested_bundles', methods=['GET'])
 @cache_response(max_age=600)
 def get_suggested_bundles():
-    """Generate suggested product bundles"""
+    """Generate suggested product bundles based on co-purchase patterns"""
     try:
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        min_confidence = max(0.1, float(request.args.get('min_confidence', 0.3)))
-        limit = min(20, int(request.args.get('limit', 10)))
+        # Check required columns
+        required_cols = ['InvoiceNo', 'Description']
+        is_valid, missing_cols = validate_dataframe_columns(df, required_cols)
+        if not is_valid:
+            return jsonify({
+                "success": False, 
+                "error": f"Missing required columns: {missing_cols}"
+            }), 400
+        
+        # Get parameters with validation
+        min_confidence = max(0.1, min(1.0, float(request.args.get('min_confidence', 0.3))))
+        limit = min(50, max(1, int(request.args.get('limit', 10))))
         min_transactions = max(2, int(request.args.get('min_transactions', 5)))
         
         # Apply filters
@@ -635,19 +986,19 @@ def get_suggested_bundles():
         
         filtered_df = apply_filters(df, filters)
         
-        if len(filtered_df) < 100:
+        if len(filtered_df) < 50:
             return jsonify({
                 "success": True,
                 "bundles": [],
-                "note": f"Insufficient data after filtering ({len(filtered_df)} records)."
+                "note": f"Insufficient data after filtering ({len(filtered_df)} records). Try broader filters."
             })
         
         bundles = []
         
-        # Get top products
-        top_products = filtered_df['Description'].value_counts().head(30).index.tolist()
+        # Get top products for analysis
+        top_products = filtered_df['Description'].value_counts().head(50).index.tolist()
         
-        # Analyze pairs
+        # Analyze product pairs
         for i in range(len(top_products)):
             product1 = top_products[i]
             trans1 = set(filtered_df[filtered_df['Description'] == product1]['InvoiceNo'].unique())
@@ -655,7 +1006,7 @@ def get_suggested_bundles():
             if len(trans1) < min_transactions:
                 continue
             
-            for j in range(i+1, min(i+10, len(top_products))):
+            for j in range(i+1, min(i+20, len(top_products))):  # Limit comparisons for performance
                 product2 = top_products[j]
                 trans2 = set(filtered_df[filtered_df['Description'] == product2]['InvoiceNo'].unique())
                 
@@ -665,16 +1016,15 @@ def get_suggested_bundles():
                 common_trans = trans1.intersection(trans2)
                 
                 if len(common_trans) >= min_transactions:
+                    # Calculate confidence in both directions
                     confidence_1to2 = len(common_trans) / len(trans1) if len(trans1) > 0 else 0
                     confidence_2to1 = len(common_trans) / len(trans2) if len(trans2) > 0 else 0
                     confidence = max(confidence_1to2, confidence_2to1)
                     
                     if confidence >= min_confidence:
-                        bundle_df = filtered_df[filtered_df['InvoiceNo'].isin(common_trans)]
-                        bundle_products = filtered_df[filtered_df['InvoiceNo'].isin(common_trans)]['Description'].unique()
-                        
                         # Calculate bundle metrics
-                        bundle_revenue = bundle_df['TotalAmount'].sum()
+                        bundle_df = filtered_df[filtered_df['InvoiceNo'].isin(common_trans)]
+                        bundle_revenue = bundle_df['TotalAmount'].sum() if 'TotalAmount' in bundle_df.columns else 0
                         avg_transaction_value = bundle_revenue / len(common_trans) if len(common_trans) > 0 else 0
                         
                         # Calculate lift
@@ -682,21 +1032,23 @@ def get_suggested_bundles():
                         expected_cooccurrence = (len(trans1) * len(trans2)) / total_transactions if total_transactions > 0 else 0
                         lift = len(common_trans) / expected_cooccurrence if expected_cooccurrence > 0 else 1
                         
+                        # Get additional products in these transactions
+                        bundle_products = filtered_df[filtered_df['InvoiceNo'].isin(common_trans)]['Description'].unique()
+                        
                         bundles.append({
                             "bundle_id": f"B{len(bundles)+1:03d}",
                             "products": [product1, product2],
                             "product_count": 2,
-                            "bundle_name": f"{product1[:20]} & {product2[:20]}",
+                            "bundle_name": f"{product1[:25]} & {product2[:25]}",
                             "confidence": round(confidence, 3),
                             "lift": round(lift, 2),
                             "estimated_revenue": float(bundle_revenue),
                             "avg_transaction_value": round(float(avg_transaction_value), 2),
-                            "avg_product_price": float(filtered_df[filtered_df['Description'].isin([product1, product2])]['UnitPrice'].mean()),
                             "transaction_count": len(common_trans),
                             "popular_products_in_bundle": list(bundle_products[:5]) if len(bundle_products) > 0 else []
                         })
         
-        # Sort by confidence and transaction count
+        # Sort bundles by confidence and transaction count
         bundles.sort(key=lambda x: (x['confidence'], x['transaction_count']), reverse=True)
         
         return jsonify({
@@ -712,61 +1064,74 @@ def get_suggested_bundles():
         })
         
     except Exception as e:
-        print(f"Error in suggested_bundles: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"❌ Error in get_suggested_bundles: {e}")
+        return jsonify({
+            "success": False, 
+            "error": "Failed to generate product bundles",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/revenue_analysis', methods=['GET'])
 @cache_response(max_age=300)
 def get_revenue_analysis():
-    """Revenue analysis by country"""
+    """Analyze revenue by country with comprehensive metrics"""
     try:
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        limit = min(20, int(request.args.get('limit', 10)))
+        limit = min(50, max(1, int(request.args.get('limit', 20))))
         
-        # Analyze revenue by country
-        if 'Country' in df.columns and 'TotalAmount' in df.columns:
-            country_revenue = df.groupby('Country').agg({
-                'TotalAmount': ['sum', 'mean', 'std'],
-                'InvoiceNo': 'nunique',
-                'CustomerID': 'nunique',
-                'Description': 'nunique'
-            }).round(2).reset_index()
-            
-            # Flatten column names
-            country_revenue.columns = ['Country', 'total_revenue', 'avg_revenue', 'std_revenue', 
-                                       'transaction_count', 'customer_count', 'product_variety']
-            
-            # Sort by total revenue
-            country_revenue = country_revenue.sort_values('total_revenue', ascending=False)
-            
-            revenue_analysis = []
-            for idx, row in country_revenue.head(limit).iterrows():
-                country_df = df[df['Country'] == row['Country']]
-                
-                # Calculate additional metrics
-                avg_transaction = country_df.groupby('InvoiceNo')['TotalAmount'].sum().mean()
-                revenue_per_customer = row['total_revenue'] / row['customer_count'] if row['customer_count'] > 0 else 0
-                products_per_transaction = row['product_variety'] / row['transaction_count'] if row['transaction_count'] > 0 else 0
-                
-                revenue_analysis.append({
-                    "country": row['Country'],
-                    "total_revenue": float(row['total_revenue']),
-                    "transaction_count": int(row['transaction_count']),
-                    "customer_count": int(row['customer_count']),
-                    "product_variety": int(row['product_variety']),
-                    "avg_transaction_value": float(avg_transaction) if not pd.isna(avg_transaction) else 0.0,
-                    "revenue_per_customer": round(float(revenue_per_customer), 2),
-                    "products_per_transaction": round(float(products_per_transaction), 2),
-                    "revenue_growth_potential": round(float(row['total_revenue'] * 1.15), 2),
-                    "market_share": round((row['total_revenue'] / df['TotalAmount'].sum()) * 100, 2)
-                })
-        else:
+        # Check required columns
+        if 'Country' not in df.columns or 'TotalAmount' not in df.columns:
             return jsonify({
                 "success": False,
-                "error": "Required columns (Country, TotalAmount) not found in data"
+                "error": "Required columns (Country, TotalAmount) not found in data",
+                "available_columns": list(df.columns)
             }), 400
+        
+        # Analyze revenue by country
+        country_revenue = df.groupby('Country').agg({
+            'TotalAmount': ['sum', 'mean', 'count'],
+            'InvoiceNo': 'nunique',
+            'CustomerID': 'nunique',
+            'Description': 'nunique'
+        }).round(2).reset_index()
+        
+        # Flatten multi-index columns
+        country_revenue.columns = ['Country', 'total_revenue', 'avg_revenue', 'record_count', 
+                                   'transaction_count', 'customer_count', 'product_variety']
+        
+        # Sort by total revenue
+        country_revenue = country_revenue.sort_values('total_revenue', ascending=False)
+        
+        revenue_analysis = []
+        global_total_revenue = df['TotalAmount'].sum()
+        
+        for idx, row in country_revenue.head(limit).iterrows():
+            country_df = df[df['Country'] == row['Country']]
+            
+            # Calculate additional metrics
+            if 'InvoiceNo' in country_df.columns and 'TotalAmount' in country_df.columns:
+                transaction_values = country_df.groupby('InvoiceNo')['TotalAmount'].sum()
+                avg_transaction = transaction_values.mean() if not transaction_values.empty else 0
+            else:
+                avg_transaction = 0
+            
+            revenue_per_customer = row['total_revenue'] / row['customer_count'] if row['customer_count'] > 0 else 0
+            products_per_transaction = row['product_variety'] / row['transaction_count'] if row['transaction_count'] > 0 else 0
+            
+            revenue_analysis.append({
+                "country": row['Country'],
+                "total_revenue": float(row['total_revenue']),
+                "transaction_count": int(row['transaction_count']),
+                "customer_count": int(row['customer_count']),
+                "product_variety": int(row['product_variety']),
+                "avg_transaction_value": float(avg_transaction),
+                "revenue_per_customer": round(float(revenue_per_customer), 2),
+                "products_per_transaction": round(float(products_per_transaction), 2),
+                "market_share": round((row['total_revenue'] / global_total_revenue * 100), 2) if global_total_revenue > 0 else 0,
+                "records": int(row['record_count'])
+            })
         
         return jsonify({
             "success": True,
@@ -774,27 +1139,40 @@ def get_revenue_analysis():
             "analysis_type": "country_revenue",
             "metadata": {
                 "total_countries_analyzed": len(country_revenue),
-                "global_total_revenue": float(df['TotalAmount'].sum()),
-                "global_avg_transaction": float(df.groupby('InvoiceNo')['TotalAmount'].sum().mean())
+                "global_total_revenue": float(global_total_revenue),
+                "global_avg_transaction": float(df.groupby('InvoiceNo')['TotalAmount'].sum().mean()) 
+                    if 'InvoiceNo' in df.columns and 'TotalAmount' in df.columns else 0
             }
         })
         
     except Exception as e:
-        print(f"Error in revenue_analysis: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"❌ Error in get_revenue_analysis: {e}")
+        return jsonify({
+            "success": False, 
+            "error": "Failed to analyze revenue data",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/seasonal_data', methods=['GET'])
 @cache_response(max_age=1800)
 def get_seasonal_data():
-    """Seasonal patterns analysis"""
+    """Analyze seasonal and temporal patterns in the data"""
     try:
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        # Monthly analysis
-        monthly_data = []
-        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        # Check required columns
+        if 'Month' not in df.columns or 'TotalAmount' not in df.columns:
+            return jsonify({
+                "success": False, 
+                "error": "Required columns (Month, TotalAmount) not found"
+            }), 400
         
+        monthly_data = []
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        
+        # Monthly analysis
         month_stats = df.groupby('Month').agg({
             'TotalAmount': ['sum', 'mean', 'count'],
             'InvoiceNo': 'nunique',
@@ -802,14 +1180,23 @@ def get_seasonal_data():
             'Description': 'nunique'
         }).round(2).reset_index()
         
+        # Flatten columns
         month_stats.columns = ['Month', 'total_revenue', 'avg_revenue', 'record_count', 
                                'transaction_count', 'customer_count', 'product_variety']
+        
+        global_total_revenue = df['TotalAmount'].sum()
         
         for idx, row in month_stats.iterrows():
             month_df = df[df['Month'] == row['Month']]
             
             # Calculate transaction-level metrics
-            transaction_values = month_df.groupby('InvoiceNo')['TotalAmount'].sum()
+            if 'InvoiceNo' in month_df.columns and 'TotalAmount' in month_df.columns:
+                transaction_values = month_df.groupby('InvoiceNo')['TotalAmount'].sum()
+                avg_transaction = transaction_values.mean() if not transaction_values.empty else 0
+                median_transaction = transaction_values.median() if not transaction_values.empty else 0
+            else:
+                avg_transaction = 0
+                median_transaction = 0
             
             monthly_data.append({
                 "month": int(row['Month']),
@@ -818,15 +1205,15 @@ def get_seasonal_data():
                 "transactions": int(row['transaction_count']),
                 "customers": int(row['customer_count']),
                 "product_variety": int(row['product_variety']),
-                "avg_transaction": float(transaction_values.mean()) if not transaction_values.empty else 0.0,
-                "median_transaction": float(transaction_values.median()) if not transaction_values.empty else 0.0,
+                "avg_transaction": float(avg_transaction),
+                "median_transaction": float(median_transaction),
                 "records": int(row['record_count']),
-                "revenue_share": round((row['total_revenue'] / df['TotalAmount'].sum()) * 100, 2)
+                "revenue_share": round((row['total_revenue'] / global_total_revenue * 100), 2) if global_total_revenue > 0 else 0
             })
         
         # Hourly analysis
         hourly_data = []
-        if 'Hour' in df.columns:
+        if 'Hour' in df.columns and 'TotalAmount' in df.columns:
             hour_stats = df.groupby('Hour').agg({
                 'TotalAmount': ['sum', 'mean', 'count'],
                 'InvoiceNo': 'nunique'
@@ -850,7 +1237,7 @@ def get_seasonal_data():
         weekday_data = []
         weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         
-        if 'Weekday' in df.columns:
+        if 'Weekday' in df.columns and 'TotalAmount' in df.columns:
             weekday_stats = df.groupby('Weekday').agg({
                 'TotalAmount': ['sum', 'mean', 'count'],
                 'InvoiceNo': 'nunique',
@@ -866,18 +1253,28 @@ def get_seasonal_data():
             
             for idx, row in weekday_stats.iterrows():
                 weekday_df = df[df['Weekday'] == row['Weekday']]
-                transaction_values = weekday_df.groupby('InvoiceNo')['TotalAmount'].sum()
+                
+                if 'InvoiceNo' in weekday_df.columns and 'TotalAmount' in weekday_df.columns:
+                    transaction_values = weekday_df.groupby('InvoiceNo')['TotalAmount'].sum()
+                    avg_transaction = transaction_values.mean() if not transaction_values.empty else 0
+                else:
+                    avg_transaction = 0
                 
                 weekday_data.append({
                     "weekday": row['Weekday'],
-                    "weekday_num": weekday_order.index(row['Weekday']),
+                    "weekday_num": weekday_order.index(row['Weekday']) if row['Weekday'] in weekday_order else 0,
                     "revenue": float(row['total_revenue']),
                     "transactions": int(row['transaction_count']),
                     "customers": int(row['customer_count']),
                     "records": int(row['record_count']),
-                    "avg_transaction": float(transaction_values.mean()) if not transaction_values.empty else 0.0,
+                    "avg_transaction": float(avg_transaction),
                     "revenue_per_customer": float(row['total_revenue'] / row['customer_count']) if row['customer_count'] > 0 else 0
                 })
+        
+        # Find peak periods
+        peak_month = max(monthly_data, key=lambda x: x['revenue'])['month_name'] if monthly_data else None
+        peak_hour = max(hourly_data, key=lambda x: x['revenue'])['hour'] if hourly_data else None
+        peak_weekday = max(weekday_data, key=lambda x: x['revenue'])['weekday'] if weekday_data else None
         
         return jsonify({
             "success": True,
@@ -888,47 +1285,70 @@ def get_seasonal_data():
                 "total_months": len(monthly_data),
                 "total_hours": len(hourly_data),
                 "total_weekdays": len(weekday_data),
-                "peak_month": max(monthly_data, key=lambda x: x['revenue'])['month_name'] if monthly_data else None,
-                "peak_hour": max(hourly_data, key=lambda x: x['revenue'])['hour'] if hourly_data else None,
-                "peak_weekday": max(weekday_data, key=lambda x: x['revenue'])['weekday'] if weekday_data else None
+                "peak_month": peak_month,
+                "peak_hour": peak_hour,
+                "peak_weekday": peak_weekday,
+                "global_total_revenue": float(global_total_revenue)
             }
         })
         
     except Exception as e:
-        print(f"Error in seasonal_data: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"❌ Error in get_seasonal_data: {e}")
+        return jsonify({
+            "success": False, 
+            "error": "Failed to analyze seasonal data",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/frequent_itemsets', methods=['GET'])
 @cache_response(max_age=600)
 def get_frequent_itemsets():
-    """Get frequent itemsets for network graph"""
+    """Generate network graph data for product relationships"""
     try:
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
         min_support = max(0.001, float(request.args.get('min_support', 0.02)))
-        limit = min(30, int(request.args.get('limit', 20)))
+        limit = min(100, max(5, int(request.args.get('limit', 20))))
+        
+        # Check required columns
+        if 'Description' not in df.columns:
+            return jsonify({
+                "success": False, 
+                "error": "Description column not found"
+            }), 400
         
         # Get top products
-        product_stats = df.groupby('Description').agg({
-            'TotalAmount': 'sum',
-            'InvoiceNo': 'nunique',
-            'CustomerID': 'nunique'
-        }).round(2).reset_index()
-        
-        product_stats.columns = ['Description', 'total_revenue', 'transaction_count', 'customer_count']
-        top_products = product_stats.nlargest(limit, 'transaction_count')['Description'].tolist()
+        if 'TotalAmount' in df.columns and 'InvoiceNo' in df.columns:
+            product_stats = df.groupby('Description').agg({
+                'TotalAmount': 'sum',
+                'InvoiceNo': 'nunique'
+            }).reset_index()
+            
+            product_stats.columns = ['Description', 'total_revenue', 'transaction_count']
+            top_products = product_stats.nlargest(limit, 'transaction_count')['Description'].tolist()
+        else:
+            top_products = df['Description'].value_counts().head(limit).index.tolist()
         
         nodes = []
         links = []
         
-        # Create nodes
+        # Create nodes (products)
         for i, product in enumerate(top_products):
-            product_info = product_stats[product_stats['Description'] == product].iloc[0]
             product_df = df[df['Description'] == product]
             
-            # Calculate category based on price
-            avg_price = product_df['UnitPrice'].mean()
+            # Calculate statistics
+            total_revenue = product_df['TotalAmount'].sum() if 'TotalAmount' in product_df.columns else 0
+            transaction_count = product_df['InvoiceNo'].nunique() if 'InvoiceNo' in product_df.columns else len(product_df)
+            customer_count = product_df['CustomerID'].nunique() if 'CustomerID' in product_df.columns else 0
+            
+            # Categorize by price
+            avg_price = 0
+            if 'UnitPrice' in product_df.columns:
+                avg_price = product_df['UnitPrice'].mean()
+            elif 'Price' in product_df.columns:
+                avg_price = product_df['Price'].mean()
+            
             if avg_price < 10:
                 category = "Low Price"
             elif avg_price < 50:
@@ -936,43 +1356,49 @@ def get_frequent_itemsets():
             else:
                 category = "High Price"
             
-            # Calculate centrality metrics
-            invoices_with_product = set(product_df['InvoiceNo'].unique())
+            # Store invoices for this product
+            invoices_with_product = set()
+            if 'InvoiceNo' in product_df.columns:
+                invoices_with_product = set(product_df['InvoiceNo'].unique())
             
             nodes.append({
                 "id": f"P{i:03d}",
                 "name": product[:30],
                 "full_name": product,
                 "group": category,
-                "value": float(product_info['total_revenue'] / 1000),  # Value in thousands
-                "revenue": float(product_info['total_revenue']),
-                "transactions": int(product_info['transaction_count']),
-                "customers": int(product_info['customer_count']),
+                "value": float(total_revenue / 1000) if total_revenue > 0 else 1,
+                "revenue": float(total_revenue),
+                "transactions": transaction_count,
+                "customers": customer_count,
                 "avg_price": float(avg_price) if not pd.isna(avg_price) else 0.0,
-                "degree": 0  # Will be updated when creating links
+                "degree": 0  # Will be updated with connections
             })
         
-        # Create links
+        # Create links (relationships between products)
         link_id = 0
         for i in range(len(nodes)):
             product1 = nodes[i]['full_name']
-            invoices1 = set(df[df['Description'] == product1]['InvoiceNo'].unique())
+            invoices1 = set(df[df['Description'] == product1]['InvoiceNo'].unique()) if 'InvoiceNo' in df.columns else set()
             
-            for j in range(i+1, min(i+15, len(nodes))):
+            for j in range(i+1, min(i+10, len(nodes))):  # Limit comparisons
                 product2 = nodes[j]['full_name']
-                invoices2 = set(df[df['Description'] == product2]['InvoiceNo'].unique())
+                invoices2 = set(df[df['Description'] == product2]['InvoiceNo'].unique()) if 'InvoiceNo' in df.columns else set()
+                
                 common_invoices = invoices1.intersection(invoices2)
                 
                 if common_invoices and len(common_invoices) >= 2:
                     # Calculate Jaccard similarity
-                    jaccard = len(common_invoices) / len(invoices1.union(invoices2)) if len(invoices1.union(invoices2)) > 0 else 0
+                    union_invoices = invoices1.union(invoices2)
+                    jaccard = len(common_invoices) / len(union_invoices) if len(union_invoices) > 0 else 0
                     
                     # Calculate lift
-                    total_transactions = df['InvoiceNo'].nunique()
+                    total_transactions = df['InvoiceNo'].nunique() if 'InvoiceNo' in df.columns else 1
                     expected_cooccurrence = (len(invoices1) * len(invoices2)) / total_transactions if total_transactions > 0 else 0
                     lift = len(common_invoices) / expected_cooccurrence if expected_cooccurrence > 0 else 1
                     
                     if jaccard >= 0.01:  # Minimum similarity threshold
+                        common_revenue = df[df['InvoiceNo'].isin(common_invoices)]['TotalAmount'].sum() if 'TotalAmount' in df.columns else 0
+                        
                         links.append({
                             "id": f"L{link_id:04d}",
                             "source": nodes[i]['id'],
@@ -982,7 +1408,7 @@ def get_frequent_itemsets():
                             "value": float(jaccard),
                             "transactions": len(common_invoices),
                             "strength": float(lift),
-                            "revenue": float(df[df['InvoiceNo'].isin(common_invoices)]['TotalAmount'].sum())
+                            "revenue": float(common_revenue)
                         })
                         link_id += 1
                         
@@ -1006,21 +1432,25 @@ def get_frequent_itemsets():
         })
         
     except Exception as e:
-        print(f"Error in frequent_itemsets: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"❌ Error in get_frequent_itemsets: {e}")
+        return jsonify({
+            "success": False, 
+            "error": "Failed to generate network data",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/top_products', methods=['GET'])
 @cache_response(max_age=300)
 def get_top_products():
-    """Get top products"""
+    """Get ranked list of top products by various metrics"""
     try:
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        limit = min(50, int(request.args.get('limit', 20)))
+        limit = min(100, max(1, int(request.args.get('limit', 20))))
         sort_by = request.args.get('sort_by', 'revenue')  # revenue, transactions, customers
         
-        # Apply filters if any
+        # Apply filters
         filters = {
             'country': request.args.get('country', 'all'),
             'year': request.args.get('year', 'all'),
@@ -1030,56 +1460,117 @@ def get_top_products():
         
         filtered_df = apply_filters(df, filters)
         
-        # Calculate product statistics
-        product_stats = filtered_df.groupby('Description').agg({
-            'TotalAmount': ['sum', 'mean', 'count'],
-            'InvoiceNo': 'nunique',
-            'CustomerID': 'nunique',
-            'UnitPrice': 'mean',
-            'Quantity': 'mean'
-        }).round(2).reset_index()
+        # Check required columns
+        if 'Description' not in filtered_df.columns:
+            return jsonify({
+                "success": False, 
+                "error": "Description column not found"
+            }), 400
         
-        product_stats.columns = ['Description', 'total_revenue', 'avg_revenue', 'record_count', 
-                                 'transaction_count', 'customer_count', 'avg_price', 'avg_quantity']
+        # Build aggregation dictionary dynamically
+        aggregation_dict = {}
+        
+        if 'TotalAmount' in filtered_df.columns:
+            aggregation_dict['TotalAmount'] = ['sum', 'mean']
+        
+        if 'InvoiceNo' in filtered_df.columns:
+            aggregation_dict['InvoiceNo'] = 'nunique'
+        
+        if 'CustomerID' in filtered_df.columns:
+            aggregation_dict['CustomerID'] = 'nunique'
+        
+        if 'UnitPrice' in filtered_df.columns:
+            aggregation_dict['UnitPrice'] = 'mean'
+        elif 'Price' in filtered_df.columns:
+            aggregation_dict['Price'] = 'mean'
+        
+        if 'Quantity' in filtered_df.columns:
+            aggregation_dict['Quantity'] = 'mean'
+        
+        # Always include count
+        aggregation_dict['Description'] = 'count'
+        
+        # Group by product
+        product_stats = filtered_df.groupby('Description').agg(aggregation_dict).round(2).reset_index()
+        
+        # Flatten column names
+        flat_columns = ['Description']
+        for col, agg_func in aggregation_dict.items():
+            if col == 'Description':
+                continue
+            if isinstance(agg_func, list):
+                for func in agg_func:
+                    flat_columns.append(f"{col}_{func}")
+            else:
+                flat_columns.append(f"{col}_{agg_func}")
+        
+        # Ensure we don't exceed actual columns
+        product_stats.columns = flat_columns[:len(product_stats.columns)]
         
         # Sort based on parameter
-        if sort_by == 'transactions':
-            product_stats = product_stats.sort_values('transaction_count', ascending=False)
-        elif sort_by == 'customers':
-            product_stats = product_stats.sort_values('customer_count', ascending=False)
-        else:  # revenue (default)
-            product_stats = product_stats.sort_values('total_revenue', ascending=False)
+        sort_column_map = {
+            'revenue': 'TotalAmount_sum',
+            'transactions': 'InvoiceNo_nunique',
+            'customers': 'CustomerID_nunique',
+            'quantity': 'Quantity_mean'
+        }
+        
+        sort_column = sort_column_map.get(sort_by, 'TotalAmount_sum')
+        
+        if sort_column in product_stats.columns:
+            product_stats = product_stats.sort_values(sort_column, ascending=False)
+        elif 'InvoiceNo_nunique' in product_stats.columns:
+            product_stats = product_stats.sort_values('InvoiceNo_nunique', ascending=False)
+        else:
+            product_stats = product_stats.sort_values('Description_count', ascending=False)
+        
+        # Calculate global totals for percentages
+        total_filtered_revenue = filtered_df['TotalAmount'].sum() if 'TotalAmount' in filtered_df.columns else 0
+        total_filtered_transactions = filtered_df['InvoiceNo'].nunique() if 'InvoiceNo' in filtered_df.columns else 0
         
         products_list = []
         for idx, row in product_stats.head(limit).iterrows():
             # Calculate additional metrics
             product_df = filtered_df[filtered_df['Description'] == row['Description']]
             
-            # Calculate return customer rate
-            return_customers = product_df.groupby('CustomerID').size()
-            return_customer_rate = (len(return_customers[return_customers > 1]) / len(return_customers) * 100) if len(return_customers) > 0 else 0
+            # Return customer rate
+            return_customer_rate = 0
+            if 'CustomerID' in product_df.columns:
+                return_customers = product_df.groupby('CustomerID').size()
+                return_customer_rate = (len(return_customers[return_customers > 1]) / len(return_customers) * 100) if len(return_customers) > 0 else 0
             
-            # Calculate peak time
-            if 'Hour' in product_df.columns:
-                peak_hour = int(product_df['Hour'].mode().iloc[0]) if not product_df['Hour'].mode().empty else 12
-            else:
-                peak_hour = 12
+            # Peak hour
+            peak_hour = int(product_df['Hour'].mode().iloc[0]) if 'Hour' in product_df.columns and not product_df['Hour'].mode().empty else 12
+            
+            # Extract values safely
+            total_revenue = float(row.get('TotalAmount_sum', 0))
+            transaction_count = int(row.get('InvoiceNo_nunique', row.get('Description_count', 0)))
+            customer_count = int(row.get('CustomerID_nunique', 0))
+            record_count = int(row.get('Description_count', 0))
+            
+            # Calculate percentages
+            revenue_share = (total_revenue / total_filtered_revenue * 100) if total_filtered_revenue > 0 else 0
+            transaction_share = (transaction_count / total_filtered_transactions * 100) if total_filtered_transactions > 0 else 0
+            
+            # Derived metrics
+            revenue_per_transaction = total_revenue / transaction_count if transaction_count > 0 else 0
+            revenue_per_customer = total_revenue / customer_count if customer_count > 0 else 0
             
             products_list.append({
                 "rank": idx + 1,
                 "description": row['Description'],
-                "total_revenue": float(row['total_revenue']),
-                "revenue_share": round((row['total_revenue'] / filtered_df['TotalAmount'].sum()) * 100, 2) if filtered_df['TotalAmount'].sum() > 0 else 0,
-                "transactions": int(row['transaction_count']),
-                "transaction_share": round((row['transaction_count'] / filtered_df['InvoiceNo'].nunique()) * 100, 2) if filtered_df['InvoiceNo'].nunique() > 0 else 0,
-                "customers": int(row['customer_count']),
-                "avg_price": float(row['avg_price']),
-                "avg_quantity": float(row['avg_quantity']),
-                "records": int(row['record_count']),
+                "total_revenue": total_revenue,
+                "revenue_share": round(revenue_share, 2),
+                "transactions": transaction_count,
+                "transaction_share": round(transaction_share, 2),
+                "customers": customer_count,
+                "avg_price": float(row.get('UnitPrice_mean', row.get('Price_mean', 0))),
+                "avg_quantity": float(row.get('Quantity_mean', 0)),
+                "records": record_count,
                 "return_customer_rate": round(float(return_customer_rate), 1),
                 "peak_hour": peak_hour,
-                "revenue_per_transaction": float(row['total_revenue'] / row['transaction_count']) if row['transaction_count'] > 0 else 0,
-                "revenue_per_customer": float(row['total_revenue'] / row['customer_count']) if row['customer_count'] > 0 else 0
+                "revenue_per_transaction": float(revenue_per_transaction),
+                "revenue_per_customer": float(revenue_per_customer)
             })
         
         return jsonify({
@@ -1089,105 +1580,129 @@ def get_top_products():
                 "total_products_analyzed": len(product_stats),
                 "sort_by": sort_by,
                 "filtered_records": len(filtered_df),
-                "total_revenue": float(filtered_df['TotalAmount'].sum()),
-                "total_transactions": filtered_df['InvoiceNo'].nunique()
+                "total_revenue": float(total_filtered_revenue),
+                "total_transactions": total_filtered_transactions
             }
         })
         
     except Exception as e:
-        print(f"Error in top_products: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"❌ Error in get_top_products: {e}")
+        return jsonify({
+            "success": False, 
+            "error": "Failed to get top products",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/filters', methods=['GET'])
 @cache_response(max_age=3600)
 def get_filters():
-    """Get available filters"""
+    """Get available filter options from the dataset"""
     try:
         if df is None or len(df) == 0:
-            return jsonify({"success": False, "error": "Data not loaded"}), 400
+            return jsonify({
+                "success": False, 
+                "error": "Data not loaded",
+                "note": "Please ensure data file is available and restart API"
+            }), 400
         
-        # Get unique countries (sorted, limit to reasonable number)
+        filters = {}
+        
+        # Countries
         if 'Country' in df.columns:
-            countries = sorted([str(c).strip() for c in df['Country'].dropna().unique().tolist() 
-                              if c and str(c).strip() != '' and str(c).strip().lower() != 'unknown'][:30])
+            countries = sorted([
+                str(c).strip() for c in df['Country'].dropna().unique().tolist() 
+                if c and str(c).strip() and str(c).strip().lower() != 'unknown'
+            ])
+            filters["countries"] = countries
         else:
-            countries = []
+            filters["countries"] = []
         
-        # Get years present in data
+        # Years
         if 'Year' in df.columns:
             years = sorted([int(y) for y in df['Year'].dropna().unique().tolist()])
+            filters["years"] = years
         else:
-            years = []
+            filters["years"] = []
         
-        # Get months present in data
+        # Months
         if 'Month' in df.columns:
             months_present = sorted([int(m) for m in df['Month'].dropna().unique().tolist() if 1 <= m <= 12])
             month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
             month_filters = [{"value": i, "name": month_names[i-1]} for i in months_present if 1 <= i <= 12]
+            filters["months"] = month_filters
         else:
-            month_filters = []
+            filters["months"] = []
         
-        # Get hours present in data
+        # Hours
         if 'Hour' in df.columns:
             hours_present = sorted([int(h) for h in df['Hour'].dropna().unique().tolist() if 0 <= h <= 23])
             hour_filters = [{"value": h, "name": f"{h:02d}:00"} for h in hours_present]
+            filters["hours"] = hour_filters
         else:
-            hour_filters = []
+            filters["hours"] = []
         
-        # Get top products for filter suggestions
+        # Products
         if 'Description' in df.columns:
-            top_products = df['Description'].value_counts().head(50).index.tolist()
+            top_products = df['Description'].value_counts().head(100).index.tolist()
             cleaned_products = []
             seen = set()
             
             for product in top_products:
-                if isinstance(product, str) and product.strip():
+                if isinstance(product, str):
                     clean_product = product.strip()
                     if clean_product and clean_product not in seen:
                         seen.add(clean_product)
                         cleaned_products.append(clean_product)
             
-            product_filters = sorted(cleaned_products)[:30]
+            filters["products"] = sorted(cleaned_products)[:100]
         else:
-            product_filters = []
+            filters["products"] = []
         
-        # Get weekdays present in data
+        # Weekdays
         if 'Weekday' in df.columns:
-            weekdays_present = sorted([str(w).strip() for w in df['Weekday'].dropna().unique().tolist() 
-                                      if w and str(w).strip() != ''])
+            weekdays_present = sorted([
+                str(w).strip() for w in df['Weekday'].dropna().unique().tolist() 
+                if w and str(w).strip()
+            ])
             weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            weekdays_sorted = sorted(weekdays_present, key=lambda x: weekday_order.index(x) if x in weekday_order else 99)
+            weekdays_sorted = sorted(
+                weekdays_present, 
+                key=lambda x: weekday_order.index(x) if x in weekday_order else 99
+            )
+            filters["weekdays"] = weekdays_sorted
         else:
-            weekdays_sorted = []
+            filters["weekdays"] = []
         
-        filters = {
-            "countries": countries,
-            "years": years,
-            "months": month_filters,
-            "hours": hour_filters,
-            "products": product_filters,
-            "weekdays": weekdays_sorted,
-            "statistics": {
-                "total_countries": len(countries),
-                "total_years": len(years),
-                "total_months": len(month_filters),
-                "total_products": len(product_filters),
-                "data_range": {
-                    "min_year": min(years) if years else None,
-                    "max_year": max(years) if years else None
-                }
+        # Statistics
+        filters["statistics"] = {
+            "total_countries": len(filters["countries"]),
+            "total_years": len(filters["years"]),
+            "total_months": len(filters["months"]),
+            "total_products": len(filters["products"]),
+            "data_range": {
+                "min_year": min(filters["years"]) if filters["years"] else None,
+                "max_year": max(filters["years"]) if filters["years"] else None
             }
         }
         
         return jsonify({
             "success": True,
             "filters": filters,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "data_summary": {
+                "total_records": len(df),
+                "total_products": df['Description'].nunique() if 'Description' in df.columns else 0,
+                "total_transactions": df['InvoiceNo'].nunique() if 'InvoiceNo' in df.columns else 0
+            }
         })
         
     except Exception as e:
-        print(f"Error in filters: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        print(f"❌ Error in get_filters: {e}")
+        return jsonify({
+            "success": False, 
+            "error": "Failed to get filter options",
+            "details": str(e) if debug else None
+        }), 500
 
 @app.route('/api/product_stats', methods=['GET'])
 @cache_response(max_age=300)
@@ -1199,7 +1714,10 @@ def get_product_stats():
         
         product_name = request.args.get('product', '').strip()
         if not product_name:
-            return jsonify({"success": False, "error": "Product name is required"}), 400
+            return jsonify({
+                "success": False, 
+                "error": "Product name is required"
+            }), 400
         
         # Apply filters
         filters = {
@@ -1210,20 +1728,31 @@ def get_product_stats():
         
         filtered_df = apply_filters(df, filters)
         
+        if len(filtered_df) == 0:
+            return jsonify({
+                "success": False,
+                "error": "No data available with current filters"
+            }), 404
+        
         # Find exact or similar product
         if product_name in filtered_df['Description'].values:
             exact_match = product_name
         else:
-            # Try to find similar products
-            similar_products = filtered_df[filtered_df['Description'].str.contains(product_name, case=False, na=False)]['Description'].unique()
+            # Try case-insensitive search
+            similar_products = filtered_df[
+                filtered_df['Description'].astype(str).str.lower().str.contains(product_name.lower(), na=False)
+            ]['Description'].unique()
+            
             if len(similar_products) > 0:
                 exact_match = similar_products[0]
             else:
                 return jsonify({
                     "success": False,
-                    "error": f"Product '{product_name}' not found in filtered data"
+                    "error": f"Product '{product_name}' not found in filtered data",
+                    "suggestion": "Try a different search term or check spelling"
                 }), 404
         
+        # Get product data
         product_df = filtered_df[filtered_df['Description'] == exact_match]
         
         if len(product_df) == 0:
@@ -1241,7 +1770,8 @@ def get_product_stats():
                 "error": f"Could not calculate statistics for product '{exact_match}'"
             }), 500
         
-        # Calculate trend data
+        # Monthly trend data
+        monthly_trend_data = []
         if 'Month' in product_df.columns and 'Year' in product_df.columns:
             monthly_trend = product_df.groupby(['Year', 'Month']).agg({
                 'TotalAmount': 'sum',
@@ -1249,7 +1779,6 @@ def get_product_stats():
                 'InvoiceNo': 'nunique'
             }).reset_index()
             
-            monthly_trend_data = []
             for idx, row in monthly_trend.iterrows():
                 monthly_trend_data.append({
                     "year": int(row['Year']),
@@ -1258,24 +1787,28 @@ def get_product_stats():
                     "quantity": int(row['Quantity']),
                     "transactions": int(row['InvoiceNo'])
                 })
-        else:
-            monthly_trend_data = []
         
-        # Calculate associated products (co-purchased)
-        invoices_with_product = set(product_df['InvoiceNo'].unique())
-        co_purchased_products = filtered_df[filtered_df['InvoiceNo'].isin(invoices_with_product)]
-        co_purchased_counts = co_purchased_products[co_purchased_products['Description'] != exact_match]['Description'].value_counts().head(10)
-        
+        # Associated products (co-purchased)
         associated_products = []
-        for product, count in co_purchased_counts.items():
-            co_occurrence_rate = count / len(invoices_with_product) * 100 if len(invoices_with_product) > 0 else 0
-            associated_products.append({
-                "product": product,
-                "co_purchase_count": int(count),
-                "co_occurrence_rate": round(float(co_occurrence_rate), 1)
-            })
+        if 'InvoiceNo' in product_df.columns:
+            invoices_with_product = set(product_df['InvoiceNo'].unique())
+            
+            if invoices_with_product and 'InvoiceNo' in filtered_df.columns:
+                co_purchased_products = filtered_df[filtered_df['InvoiceNo'].isin(invoices_with_product)]
+                co_purchased_counts = co_purchased_products[
+                    co_purchased_products['Description'] != exact_match
+                ]['Description'].value_counts().head(10)
+                
+                for product, count in co_purchased_counts.items():
+                    co_occurrence_rate = count / len(invoices_with_product) * 100 if len(invoices_with_product) > 0 else 0
+                    associated_products.append({
+                        "product": product,
+                        "co_purchase_count": int(count),
+                        "co_occurrence_rate": round(float(co_occurrence_rate), 1)
+                    })
         
-        # Customer segmentation
+        # Top customers
+        top_customers_list = []
         if 'CustomerID' in product_df.columns:
             customer_stats = product_df.groupby('CustomerID').agg({
                 'TotalAmount': 'sum',
@@ -1284,7 +1817,6 @@ def get_product_stats():
             }).reset_index()
             
             top_customers = customer_stats.nlargest(5, 'TotalAmount')
-            top_customers_list = []
             for idx, row in top_customers.iterrows():
                 top_customers_list.append({
                     "customer_id": row['CustomerID'],
@@ -1292,9 +1824,8 @@ def get_product_stats():
                     "total_quantity": int(row['Quantity']),
                     "purchases": int(row['InvoiceNo'])
                 })
-        else:
-            top_customers_list = []
         
+        # Compile response
         result = {
             "success": True,
             "product": {
@@ -1306,7 +1837,9 @@ def get_product_stats():
                 "metadata": {
                     "analysis_date": datetime.now().isoformat(),
                     "records_analyzed": len(product_df),
-                    "time_period_covered": f"{filtered_df['Year'].min()} - {filtered_df['Year'].max()}" if 'Year' in filtered_df.columns else "Unknown"
+                    "time_period_covered": f"{filtered_df['Year'].min()} - {filtered_df['Year'].max()}" 
+                        if 'Year' in filtered_df.columns else "Unknown",
+                    "filters_applied": filters
                 }
             }
         }
@@ -1314,27 +1847,40 @@ def get_product_stats():
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error in product_stats: {e}")
+        print(f"❌ Error in get_product_stats: {e}")
         traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({
+            "success": False, 
+            "error": "Failed to get product statistics",
+            "details": str(e) if debug else None
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
-    print(f"\n🚀 Starting Intelligent Product Assortment Dashboard API...")
+    print(f"\n{'='*60}")
+    print("🚀 STARTING INTELLIGENT PRODUCT ASSORTMENT DASHBOARD API")
+    print(f"{'='*60}")
     print(f"   Port: {port}")
     print(f"   Debug: {debug}")
     print(f"   Data loaded: {'Yes' if df is not None and len(df) > 0 else 'No'}")
     
     if df is not None:
-        print(f"   Total records: {len(df):,}")
-        print(f"   Total revenue: ${df['TotalAmount'].sum():,.2f}")
+        print(f"\n📊 DATA STATISTICS:")
+        print(f"   Total Records: {len(df):,}")
+        print(f"   Total Transactions: {df['InvoiceNo'].nunique():,}" if 'InvoiceNo' in df.columns else "   No InvoiceNo column")
+        print(f"   Total Products: {df['Description'].nunique():,}" if 'Description' in df.columns else "   No Description column")
+        if 'TotalAmount' in df.columns:
+            print(f"   Total Revenue: ${df['TotalAmount'].sum():,.2f}")
+        print(f"   Available Columns: {', '.join(df.columns[:10])}{'...' if len(df.columns) > 10 else ''}")
     
-    print(f"\n📡 API Endpoints:")
+    print(f"\n📡 API ENDPOINTS:")
     print(f"   http://localhost:{port}/")
     print(f"   http://localhost:{port}/api/health")
     print(f"   http://localhost:{port}/api/summary")
-    print(f"   ... and more\n")
+    print(f"   ... and {len([r for r in app.url_map.iter_rules() if 'api' in str(r)])} more endpoints")
+    print(f"\n✅ API READY")
+    print(f"{'='*60}\n")
     
     app.run(debug=debug, port=port, host='0.0.0.0', threaded=True)

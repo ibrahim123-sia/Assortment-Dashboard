@@ -5,7 +5,6 @@ import {
   Package,
   TrendingUp,
   Calendar,
-  Network,
   Database,
   Settings
 } from 'lucide-react';
@@ -16,7 +15,7 @@ const menuItems = [
   { icon: Package, label: 'Product Bundles', path: '/product-bundles' },
   { icon: TrendingUp, label: 'Revenue Analysis', path: '/revenue-analysis' },
   { icon: Calendar, label: 'Seasonal Analysis', path: '/seasonal-analysis' },
-  { icon: Network, label: 'Network View', path: '/network-view' },
+
   { icon: Database, label: 'Data Summary', path: '/data-summary' },
 ];
 

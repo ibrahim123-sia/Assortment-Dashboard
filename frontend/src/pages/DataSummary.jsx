@@ -139,7 +139,7 @@ export const DataSummary = () => {
         </p>
       </div>
 
-      <FilterPanel onFilterChange={setFilters} loading={loading} />
+   
 
       {/* Data Health Warning */}
       {summary.data_quality?.data_health < 80 && (
