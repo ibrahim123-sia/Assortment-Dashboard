@@ -1,35 +1,89 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Calendar, Clock, Globe, TrendingUp, BarChart3, TrendingDown } from 'lucide-react';
+import { Calendar, Clock, Globe, TrendingUp, BarChart3, TrendingDown, Filter, Package } from 'lucide-react';
 
 export const SeasonalAnalysis = () => {
   const [loading, setLoading] = useState(true);
   const [seasonalData, setSeasonalData] = useState(null);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({
+    product: 'all',
+    year: 'all',
+    month: 'all'
+  });
+
+  const [availableFilters, setAvailableFilters] = useState({
+    products: [],
+    years: [],
+    months: []
+  });
+
+  useEffect(() => {
+    fetchAvailableFilters();
+  }, []);
 
   useEffect(() => {
     fetchSeasonalData();
   }, [filters]);
 
+  const fetchAvailableFilters = async () => {
+    try {
+      const response = await axios.get('/api/filters');
+      if (response.data.success) {
+        setAvailableFilters({
+          products: response.data.filters.products || [],
+          years: response.data.filters.years || [],
+          months: response.data.filters.months || []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching filters:', error);
+    }
+  };
+
   const fetchSeasonalData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/seasonal_data');
+      // Use the seasonal product analysis endpoint
+      const response = await axios.get('/api/seasonal_product_analysis', {
+        params: filters
+      });
+      
       if (response.data.success) {
         setSeasonalData(response.data);
+      } else {
+        console.error('API error:', response.data.error);
+        setSeasonalData(null);
       }
     } catch (error) {
-      console.error('Error fetching seasonal data:', error);
+      console.error("Error fetching seasonal data:", error);
+      setSeasonalData(null);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleResetFilters = () => {
+    setFilters({
+      product: 'all',
+      year: 'all',
+      month: 'all'
+    });
+  };
+
   const calculateSeasonalInsights = () => {
-    if (!seasonalData) return null;
+    if (!seasonalData || !seasonalData.monthly_data || seasonalData.monthly_data.length === 0) {
+      return {
+        best_month: 'N/A',
+        best_month_revenue: 0,
+        peak_hour: 'N/A',
+        peak_hour_revenue: 0,
+        top_weekday: 'N/A',
+        top_weekday_revenue: 0,
+        monthly_trend: 0,
+      };
+    }
     
     const monthlyData = seasonalData.monthly_data || [];
     const hourlyData = seasonalData.hourly_data || [];
@@ -50,12 +104,12 @@ export const SeasonalAnalysis = () => {
     // Calculate trends
     const sortedMonths = [...monthlyData].sort((a, b) => a.month - b.month);
     const monthlyTrend = sortedMonths.length > 1 ? 
-      (sortedMonths[sortedMonths.length-1].revenue / sortedMonths[0].revenue - 1) * 100 : 0;
+      ((sortedMonths[sortedMonths.length-1].revenue / sortedMonths[0].revenue - 1) * 100) || 0 : 0;
     
     return {
       best_month: bestMonth.month_name,
       best_month_revenue: bestMonth.revenue,
-      peak_hour: bestHour.hour + ':00',
+      peak_hour: typeof bestHour.hour === 'number' ? `${bestHour.hour}:00` : 'N/A',
       peak_hour_revenue: bestHour.revenue,
       top_weekday: bestWeekday.weekday,
       top_weekday_revenue: bestWeekday.revenue,
@@ -65,27 +119,26 @@ export const SeasonalAnalysis = () => {
 
   const monthColumns = [
     { key: 'month_name', title: 'Month', sortable: true },
-    { key: 'revenue', title: 'Revenue', sortable: true, render: (value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => value.toLocaleString() },
-    { key: 'customers', title: 'Customers', sortable: true, render: (value) => value.toLocaleString() },
-    { key: 'avg_transaction', title: 'Avg. Transaction', sortable: true, render: (value) => `$${value.toFixed(2)}` },
-    { key: 'revenue_share', title: 'Market Share', sortable: true, render: (value) => `${value.toFixed(1)}%` },
+    { key: 'revenue', title: 'Revenue', sortable: true, render: (value) => `$${typeof value === 'number' ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}` },
+    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
+    { key: 'quantity', title: 'Quantity', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
+    { key: 'products', title: 'Products', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
   ];
 
   const hourlyColumns = [
     { key: 'hour', title: 'Hour', sortable: true, render: (value) => `${value}:00` },
     { key: 'time_period', title: 'Period', sortable: true },
-    { key: 'revenue', title: 'Revenue', sortable: true, render: (value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => value.toLocaleString() },
-    { key: 'avg_transaction', title: 'Avg. Spend', sortable: true, render: (value) => `$${value.toFixed(2)}` },
+    { key: 'revenue', title: 'Revenue', sortable: true, render: (value) => `$${typeof value === 'number' ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}` },
+    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
+    { key: 'quantity', title: 'Quantity', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
   ];
 
   const weekdayColumns = [
     { key: 'weekday', title: 'Day', sortable: true },
-    { key: 'revenue', title: 'Revenue', sortable: true, render: (value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => value.toLocaleString() },
-    { key: 'avg_transaction', title: 'Avg. Spend', sortable: true, render: (value) => `$${value.toFixed(2)}` },
-    { key: 'revenue_per_customer', title: 'Per Customer', sortable: true, render: (value) => `$${value.toFixed(2)}` },
+    { key: 'revenue', title: 'Revenue', sortable: true, render: (value) => `$${typeof value === 'number' ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}` },
+    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
+    { key: 'customers', title: 'Customers', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
+    { key: 'quantity', title: 'Quantity', sortable: true, render: (value) => typeof value === 'number' ? value.toLocaleString() : '0' },
   ];
 
   const insights = calculateSeasonalInsights();
@@ -97,14 +150,101 @@ export const SeasonalAnalysis = () => {
           Seasonal Analysis
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Analyze purchasing patterns by time and geography
+          Analyze purchasing patterns by time and product seasonality
         </p>
       </div>
 
-      <FilterPanel onFilterChange={setFilters} loading={loading} />
+      {/* Custom Filter Panel for Seasonal Analysis */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Filter className="h-5 w-5 text-blue-600 mr-2" />
+            <h3 className="font-semibold text-gray-900 dark:text-white">Seasonal Analysis Filters</h3>
+          </div>
+          <button
+            onClick={handleResetFilters}
+            className="flex items-center px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            Reset Filters
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Product Filter - Main for seasonal analysis */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <div className="flex items-center">
+                <Package className="h-4 w-4 mr-1" />
+                Product
+              </div>
+            </label>
+            <select
+              value={filters.product}
+              onChange={(e) => setFilters({...filters, product: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Products</option>
+              {availableFilters.products.slice(0, 50).map((product) => (
+                <option key={product} value={product}>
+                  {product.length > 40 ? product.substring(0, 40) + '...' : product}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Year
+            </label>
+            <select
+              value={filters.year}
+              onChange={(e) => setFilters({...filters, year: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Years</option>
+              {availableFilters.years.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Month Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Month
+            </label>
+            <select
+              value={filters.month}
+              onChange={(e) => setFilters({...filters, month: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Months</option>
+              {availableFilters.months.map((month) => (
+                <option key={month.value} value={month.value}>{month.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        {/* Product-specific seasonal insights */}
+        {filters.product !== 'all' && (
+          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div className="flex items-center mb-2">
+              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" />
+              <h4 className="font-medium text-gray-900 dark:text-white">
+                Analyzing seasonal patterns for: <span className="font-bold">{filters.product}</span>
+              </h4>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Viewing how this product performs across different months, hours, and weekdays.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Seasonal Insights */}
-      {insights && (
+      {!loading && seasonalData?.monthly_data?.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-center">
@@ -185,6 +325,32 @@ export const SeasonalAnalysis = () => {
         </div>
       )}
 
+      {/* Top Products Section */}
+      {!loading && seasonalData?.top_products && seasonalData.top_products.length > 0 && (
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {filters.product !== 'all' ? 'Related Products' : 'Top Products'}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {filters.product !== 'all' 
+                ? `Products frequently purchased with "${filters.product}"`
+                : 'Most popular products in the selected time period'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {seasonalData.top_products.slice(0, 5).map((product, index) => (
+              <span 
+                key={index} 
+                className="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm px-3 py-1.5 rounded-lg"
+              >
+                {product.length > 40 ? product.substring(0, 40) + '...' : product}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Monthly Analysis */}
       <div className="card">
         <div className="mb-6">
@@ -192,7 +358,10 @@ export const SeasonalAnalysis = () => {
             Monthly Performance
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Revenue and transaction patterns by month
+            {filters.product !== 'all' 
+              ? `Revenue and transaction patterns for "${filters.product}" by month`
+              : 'Revenue and transaction patterns by month'}
+            {seasonalData?.metadata?.total_revenue && ` • Total: $${seasonalData.metadata.total_revenue.toFixed(2)}`}
           </p>
         </div>
         {loading ? (
@@ -201,13 +370,27 @@ export const SeasonalAnalysis = () => {
           <DataTable
             columns={monthColumns}
             data={seasonalData.monthly_data}
-            itemsPerPage={6}
+            itemsPerPage={12}
           />
         ) : (
           <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">
+            <div className="text-gray-400 dark:text-gray-500 mb-4">
+              <Calendar className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No monthly data available
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              {filters.product !== 'all' 
+                ? `No data found for "${filters.product}" with the selected filters.`
+                : 'No data found with the selected filters.'}
             </p>
+            <button
+              onClick={handleResetFilters}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Reset Filters
+            </button>
           </div>
         )}
       </div>
@@ -219,7 +402,9 @@ export const SeasonalAnalysis = () => {
             Hourly Shopping Patterns
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Revenue distribution throughout the day
+            {filters.product !== 'all'
+              ? `Revenue distribution for "${filters.product}" throughout the day`
+              : 'Revenue distribution throughout the day'}
           </p>
         </div>
         {loading ? (
@@ -232,8 +417,14 @@ export const SeasonalAnalysis = () => {
           />
         ) : (
           <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">
+            <div className="text-gray-400 dark:text-gray-500 mb-4">
+              <Clock className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No hourly data available
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Try adjusting your filters to see hourly patterns
             </p>
           </div>
         )}
@@ -246,7 +437,9 @@ export const SeasonalAnalysis = () => {
             Weekday Performance
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Revenue distribution by day of week
+            {filters.product !== 'all'
+              ? `Revenue distribution for "${filters.product}" by day of week`
+              : 'Revenue distribution by day of week'}
           </p>
         </div>
         {loading ? (
@@ -259,39 +452,18 @@ export const SeasonalAnalysis = () => {
           />
         ) : (
           <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">
+            <div className="text-gray-400 dark:text-gray-500 mb-4">
+              <Globe className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No weekday data available
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Try adjusting your filters to see weekday patterns
             </p>
           </div>
         )}
       </div>
-
-      {/* Summary Statistics */}
-      {seasonalData?.metadata && (
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6">
-          <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-            Analysis Summary
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Months</p>
-              <p className="font-bold text-gray-900 dark:text-white">{seasonalData.metadata.total_months || 0}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Hours</p>
-              <p className="font-bold text-gray-900 dark:text-white">{seasonalData.metadata.total_hours || 0}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Weekdays</p>
-              <p className="font-bold text-gray-900 dark:text-white">{seasonalData.metadata.total_weekdays || 0}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Data Coverage</p>
-              <p className="font-bold text-gray-900 dark:text-white">100%</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

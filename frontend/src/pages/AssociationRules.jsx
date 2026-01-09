@@ -1,30 +1,39 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { TrendingUp, Target, Link2, AlertCircle, Zap, RefreshCw } from 'lucide-react';
+import { TrendingUp, Target, Link2, AlertCircle, Zap, RefreshCw, Filter, Globe, Calendar, Clock } from 'lucide-react';
 
 export const AssociationRules = () => {
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState([]);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
-  const [dataSummary, setDataSummary] = useState(null);
   const [filters, setFilters] = useState({
     min_support: 0.01,
     min_confidence: 0.3,
+    min_lift: 1.0,
     country: 'all',
     year: 'all',
     month: 'all',
     hour: 'all',
     product: 'all',
+    weekday: 'all',
     simple: true,
   });
 
-  // Fetch data summary on mount
+  const [availableFilters, setAvailableFilters] = useState({
+    countries: [],
+    years: [],
+    months: [],
+    hours: [],
+    products: [],
+    weekdays: []
+  });
+
+  // Fetch available filters on mount
   useEffect(() => {
-    fetchDataSummary();
+    fetchAvailableFilters();
   }, []);
 
   // Fetch association rules when filters change
@@ -32,14 +41,21 @@ export const AssociationRules = () => {
     fetchAssociationRules();
   }, [filters]);
 
-  const fetchDataSummary = async () => {
+  const fetchAvailableFilters = async () => {
     try {
-      const response = await axios.get('/api/summary');
+      const response = await axios.get('/api/filters');
       if (response.data.success) {
-        setDataSummary(response.data.data);
+        setAvailableFilters({
+          countries: response.data.filters.countries || [],
+          years: response.data.filters.years || [],
+          months: response.data.filters.months || [],
+          hours: response.data.filters.hours || [],
+          products: response.data.filters.products || [],
+          weekdays: response.data.filters.weekdays || []
+        });
       }
     } catch (error) {
-      console.error('Error fetching data summary:', error);
+      console.error('Error fetching filters:', error);
     }
   };
 
@@ -54,7 +70,7 @@ export const AssociationRules = () => {
         params: {
           ...filters,
           limit: 50,
-          simple: false  // Always get full data for both views
+          simple: false
         },
       });
 
@@ -62,28 +78,25 @@ export const AssociationRules = () => {
 
       if (response.data.success) {
         const rulesData = response.data.data || [];
-        console.log('Rules received:', rulesData.length);
         
         // Transform data for both simple and detailed views
         const formattedRules = rulesData.map(rule => {
-          // For simple view
           const antecedent = rule.antecedent || (rule.antecedents ? rule.antecedents[0] : '');
           const consequent = rule.consequent || (rule.consequents ? rule.consequents[0] : '');
           
           return {
-            // For simple view columns
             rule: `${antecedent} → ${consequent}`,
             confidence: rule.confidence,
             lift: rule.lift,
             support: rule.support,
-            
-            // For detailed view columns
             antecedents: rule.antecedents || [antecedent],
             consequents: rule.consequents || [consequent],
-            
-            // Keep original data
             antecedent: antecedent,
-            consequent: consequent
+            consequent: consequent,
+            antecedent_support: rule.antecedent_support,
+            consequent_support: rule.consequent_support,
+            leverage: rule.leverage,
+            conviction: rule.conviction
           };
         });
         
@@ -120,7 +133,7 @@ export const AssociationRules = () => {
       setError({
         type: 'network_error',
         message: 'Failed to connect to server',
-        details: 'Make sure the Python backend is running on port 5000',
+        details: error.message || 'Make sure the Python backend is running on port 5000',
         suggestions: [
           'Open terminal and run: python app.py',
           'Check if dataset file exists in data/ folder',
@@ -146,11 +159,13 @@ export const AssociationRules = () => {
     setFilters({
       min_support: 0.01,
       min_confidence: 0.3,
+      min_lift: 1.0,
       country: 'all',
       year: 'all',
       month: 'all',
       hour: 'all',
       product: 'all',
+      weekday: 'all',
       simple: true,
     });
   };
@@ -286,6 +301,16 @@ export const AssociationRules = () => {
         </div>
       ),
     },
+    {
+      key: 'antecedent_support',
+      title: 'Antecedent Support',
+      sortable: true,
+      render: (value) => (
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          {(value * 100).toFixed(2)}%
+        </div>
+      ),
+    },
   ];
 
   // Use appropriate columns based on view mode
@@ -302,33 +327,200 @@ export const AssociationRules = () => {
         </p>
       </div>
 
-      {/* Quick Action Buttons */}
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={() => handleQuickRetry(0.005, 0.2)}
-          className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
-          <Zap className="h-4 w-4 mr-2" />
-          Easy Mode (0.5% support, 20% confidence)
-        </button>
-        <button
-          onClick={() => handleQuickRetry(0.01, 0.3)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Target className="h-4 w-4 mr-2" />
-          Balanced (1% support, 30% confidence)
-        </button>
-        <button
-          onClick={handleResetFilters}
-          className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Reset All Filters
-        </button>
+      {/* Custom Filter Panel for Association Rules */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Filter className="h-5 w-5 text-blue-600 mr-2" />
+            <h3 className="font-semibold text-gray-900 dark:text-white">Association Rules Filters</h3>
+          </div>
+          <button
+            onClick={handleResetFilters}
+            className="flex items-center px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Reset
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Support Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Min Support ({(filters.min_support * 100).toFixed(1)}%)
+            </label>
+            <input
+              type="range"
+              min="0.001"
+              max="0.1"
+              step="0.001"
+              value={filters.min_support}
+              onChange={(e) => setFilters({...filters, min_support: parseFloat(e.target.value)})}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>0.1%</span>
+              <span>10%</span>
+            </div>
+          </div>
+
+          {/* Confidence Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Min Confidence ({(filters.min_confidence * 100).toFixed(0)}%)
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.01"
+              value={filters.min_confidence}
+              onChange={(e) => setFilters({...filters, min_confidence: parseFloat(e.target.value)})}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>10%</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          {/* Lift Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Min Lift ({filters.min_lift.toFixed(1)})
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="5.0"
+              step="0.1"
+              value={filters.min_lift}
+              onChange={(e) => setFilters({...filters, min_lift: parseFloat(e.target.value)})}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>0.5</span>
+              <span>5.0</span>
+            </div>
+          </div>
+
+          {/* Country Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <div className="flex items-center">
+                <Globe className="h-4 w-4 mr-1" />
+                Country
+              </div>
+            </label>
+            <select
+              value={filters.country}
+              onChange={(e) => setFilters({...filters, country: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Countries</option>
+              {availableFilters.countries.map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Second Row Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          {/* Product Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Product
+            </label>
+            <select
+              value={filters.product}
+              onChange={(e) => setFilters({...filters, product: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Products</option>
+              {availableFilters.products.slice(0, 50).map((product) => (
+                <option key={product} value={product}>{product.length > 30 ? product.substring(0, 30) + '...' : product}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                Year
+              </div>
+            </label>
+            <select
+              value={filters.year}
+              onChange={(e) => setFilters({...filters, year: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Years</option>
+              {availableFilters.years.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Month Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Month
+            </label>
+            <select
+              value={filters.month}
+              onChange={(e) => setFilters({...filters, month: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Months</option>
+              {availableFilters.months.map((month) => (
+                <option key={month.value} value={month.value}>{month.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Hour Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <div className="flex items-center">
+                <Clock className="h-4 w-4 mr-1" />
+                Hour
+              </div>
+            </label>
+            <select
+              value={filters.hour}
+              onChange={(e) => setFilters({...filters, hour: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Hours</option>
+              {availableFilters.hours.map((hour) => (
+                <option key={hour.value} value={hour.value}>{hour.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Weekday Filter */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Weekday
+          </label>
+          <select
+            value={filters.weekday}
+            onChange={(e) => setFilters({...filters, weekday: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+          >
+            <option value="all">All Days</option>
+            {availableFilters.weekdays.map((weekday) => (
+              <option key={weekday} value={weekday}>{weekday}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <FilterPanel onFilterChange={setFilters} loading={loading} />
-
+      
       {/* Stats Overview */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -513,7 +705,7 @@ export const AssociationRules = () => {
           <>
             <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
               Found {rules.length} unique association rules. <span className="font-medium">Lift &gt; 1</span> indicates positive association.
-              {stats?.unique_products && ` Based on ${stats.unique_products} products.`}
+              {stats?.filter_stats?.products_in_analysis && ` Based on ${stats.filter_stats.products_in_analysis} products and ${stats.filter_stats.transactions_in_analysis} transactions.`}
             </div>
             <DataTable
               columns={columns}
@@ -524,6 +716,7 @@ export const AssociationRules = () => {
             {stats?.processing_time && (
               <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
                 Processed in {stats.processing_time} seconds
+                {stats.filter_stats && ` • ${stats.filter_stats.filtered_records} filtered records`}
               </div>
             )}
           </>

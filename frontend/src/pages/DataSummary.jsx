@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Database, BarChart, PieChart, LineChart, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
+import { Database, BarChart, PieChart, LineChart, CheckCircle, AlertCircle, TrendingUp, RefreshCw } from 'lucide-react';
 
 export const DataSummary = () => {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);
-  const [filters, setFilters] = useState({});
+  const [topProducts, setTopProducts] = useState([]);
+  const [healthStatus, setHealthStatus] = useState('');
 
   useEffect(() => {
     fetchDataSummary();
+    fetchTopProducts();
   }, []);
 
   const fetchDataSummary = async () => {
@@ -20,12 +21,31 @@ export const DataSummary = () => {
       const response = await axios.get('/api/summary');
       if (response.data.success) {
         setSummary(response.data.data);
-        console.log('Data summary loaded:', response.data.data);
+        
+        // Determine health status
+        const dataHealth = response.data.data?.data_quality?.data_completeness || 0;
+        if (dataHealth >= 90) setHealthStatus('Excellent');
+        else if (dataHealth >= 80) setHealthStatus('Good');
+        else if (dataHealth >= 70) setHealthStatus('Fair');
+        else setHealthStatus('Poor');
       }
     } catch (error) {
       console.error('Error fetching data summary:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTopProducts = async () => {
+    try {
+      const response = await axios.get('/api/top_products', {
+        params: { limit: 5, sort_by: 'revenue' }
+      });
+      if (response.data.success) {
+        setTopProducts(response.data.products || []);
+      }
+    } catch (error) {
+      console.error('Error fetching top products:', error);
     }
   };
 
@@ -47,6 +67,7 @@ export const DataSummary = () => {
           onClick={fetchDataSummary}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
+          <RefreshCw className="inline-block h-4 w-4 mr-2" />
           Retry
         </button>
       </div>
@@ -65,8 +86,8 @@ export const DataSummary = () => {
       icon: CheckCircle 
     },
     { 
-      label: 'Data Health Score', 
-      value: `${summary.data_quality?.data_health || '0'}%`,
+      label: 'Data Health', 
+      value: healthStatus,
       icon: TrendingUp 
     },
     { 
@@ -97,6 +118,11 @@ export const DataSummary = () => {
       value: `$${summary.data_quality?.revenue_per_transaction?.toFixed(2) || '0.00'}`,
       icon: TrendingUp 
     },
+    { 
+      label: 'Unique Products per Transaction', 
+      value: summary.avg_basket_size?.toFixed(1) || '0.0',
+      icon: BarChart 
+    },
   ];
 
   const dataIssues = [
@@ -123,9 +149,19 @@ export const DataSummary = () => {
   ];
 
   const dateRangeItems = [
-    { label: 'Time Period', value: summary.date_range?.time_period || 'N/A' },
-    { label: 'Data Period', value: `${summary.date_range?.min_year || 'N/A'} - ${summary.date_range?.max_year || 'N/A'}` },
+    { label: 'Data Range', value: summary.date_range?.days ? `${summary.date_range.days} days` : 'N/A' },
+    { label: 'From', value: summary.date_range?.start || 'N/A' },
+    { label: 'To', value: summary.date_range?.end || 'N/A' },
     { label: 'Association Readiness', value: summary.multi_item_percentage > 20 ? 'Ready' : 'Limited' },
+  ];
+
+  const topProductsColumns = [
+    { key: 'description', title: 'Product', sortable: true, render: (value) => (
+      <div className="max-w-xs truncate" title={value}>{value || 'Unknown'}</div>
+    )},
+    { key: 'total_revenue', title: 'Revenue', sortable: true, render: (value) => `$${typeof value === 'number' ? value.toFixed(2) : '0.00'}` },
+    { key: 'transactions', title: 'Transactions', sortable: true, render: (value) => value?.toLocaleString() || '0' },
+    { key: 'revenue_share', title: 'Share', sortable: true, render: (value) => `${value?.toFixed(1) || '0.0'}%` },
   ];
 
   return (
@@ -139,10 +175,8 @@ export const DataSummary = () => {
         </p>
       </div>
 
-   
-
       {/* Data Health Warning */}
-      {summary.data_quality?.data_health < 80 && (
+      {summary.data_quality?.data_completeness < 80 && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
           <div className="flex">
             <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
@@ -152,7 +186,7 @@ export const DataSummary = () => {
               </h3>
               <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-400">
                 <p>
-                  Data health score is {summary.data_quality?.data_health}%. Issues detected in:
+                  Data completeness is {summary.data_quality?.data_completeness}%. Issues detected:
                 </p>
                 <ul className="list-disc pl-5 mt-1">
                   {summary.data_quality?.missing_customers > 0 && <li>{summary.data_quality.missing_customers} missing customer IDs</li>}
@@ -238,21 +272,7 @@ export const DataSummary = () => {
           </div>
         </div>
 
-        <div className="card">
-          <div className="flex items-center">
-            <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
-              <LineChart className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Total Customers
-              </p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {summary.total_customers?.toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
+      
       </div>
 
       {/* Detailed Sections */}
@@ -297,6 +317,21 @@ export const DataSummary = () => {
           </div>
         </div>
       </div>
+
+      {/* Top Products */}
+      {topProducts.length > 0 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Top 5 Products by Revenue
+          </h3>
+          <DataTable
+            columns={topProductsColumns}
+            data={topProducts}
+            itemsPerPage={5}
+            className="border-none shadow-none"
+          />
+        </div>
+      )}
 
       {/* Data Issues & Date Range */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -360,7 +395,11 @@ export const DataSummary = () => {
                     cy="64"
                   />
                   <circle
-                    className={`${summary.data_quality?.data_health >= 80 ? 'text-green-500' : summary.data_quality?.data_health >= 60 ? 'text-yellow-500' : 'text-red-500'}`}
+                    className={`${
+                      summary.data_quality?.data_completeness >= 90 ? 'text-green-500' : 
+                      summary.data_quality?.data_completeness >= 80 ? 'text-yellow-500' : 
+                      summary.data_quality?.data_completeness >= 70 ? 'text-orange-500' : 'text-red-500'
+                    }`}
                     strokeWidth="10"
                     strokeLinecap="round"
                     stroke="currentColor"
@@ -368,21 +407,22 @@ export const DataSummary = () => {
                     r="56"
                     cx="64"
                     cy="64"
-                    strokeDasharray={`${(summary.data_quality?.data_health || 0) * 3.52} 352`}
+                    strokeDasharray={`${(summary.data_quality?.data_completeness || 0) * 3.52} 352`}
                     strokeDashoffset="0"
                     transform="rotate(-90 64 64)"
                   />
                 </svg>
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
                   <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                    {summary.data_quality?.data_health || 0}%
+                    {summary.data_quality?.data_completeness || 0}%
                   </span>
                 </div>
               </div>
             </div>
             <p className="text-gray-600 dark:text-gray-400 mt-4">
-              {summary.data_quality?.data_health >= 80 ? 'Excellent data quality' : 
-               summary.data_quality?.data_health >= 60 ? 'Good data quality' : 
+              {summary.data_quality?.data_completeness >= 90 ? 'Excellent data quality' : 
+               summary.data_quality?.data_completeness >= 80 ? 'Good data quality' : 
+               summary.data_quality?.data_completeness >= 70 ? 'Fair data quality' : 
                'Needs improvement'}
             </p>
           </div>
@@ -392,10 +432,13 @@ export const DataSummary = () => {
       {/* Refresh Button */}
       <div className="flex justify-end">
         <button 
-          onClick={fetchDataSummary}
+          onClick={() => {
+            fetchDataSummary();
+            fetchTopProducts();
+          }}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
-          <Database className="h-4 w-4 mr-2" />
+          <RefreshCw className="h-4 w-4 mr-2" />
           Refresh Data Summary
         </button>
       </div>

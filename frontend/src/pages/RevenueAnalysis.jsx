@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { FilterPanel } from "../components/FilterPanel";
 import { DataTable } from "../components/DataTable";
 import { LoadingSpinner } from "../components/LoadingSpinner";
-import { DollarSign, TrendingUp, BarChart3, Target, Globe, Users } from "lucide-react";
+import { DollarSign, TrendingUp, BarChart3, Target, Globe, Users, Filter } from "lucide-react";
 
 export const RevenueAnalysis = () => {
   const [loading, setLoading] = useState(true);
@@ -12,17 +11,40 @@ export const RevenueAnalysis = () => {
     limit: 10,
     country: 'all',
     year: 'all',
-    month: 'all'
   });
+
+  const [availableFilters, setAvailableFilters] = useState({
+    countries: [],
+    years: []
+  });
+
+  useEffect(() => {
+    fetchAvailableFilters();
+  }, []);
 
   useEffect(() => {
     fetchRevenueAnalysis();
   }, [filters]);
 
+  const fetchAvailableFilters = async () => {
+    try {
+      const response = await axios.get("/api/filters");
+      if (response.data.success) {
+        setAvailableFilters({
+          countries: response.data.filters.countries || [],
+          years: response.data.filters.years || []
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching filters:", error);
+    }
+  };
+
   const fetchRevenueAnalysis = async () => {
     setLoading(true);
     try {
-      const response = await axios.get("/api/revenue_analysis", {
+      // Use the new revenue by country endpoint with filters
+      const response = await axios.get("/api/revenue_by_country", {
         params: filters,
       });
 
@@ -38,6 +60,14 @@ export const RevenueAnalysis = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      limit: 10,
+      country: 'all',
+      year: 'all',
+    });
   };
 
   const columns = [
@@ -139,16 +169,29 @@ export const RevenueAnalysis = () => {
   ];
 
   const calculateTotals = () => {
+    if (revenueData.length === 0) {
+      return {
+        totalRevenue: 0,
+        totalTransactions: 0,
+        totalCustomers: 0,
+        avgTransaction: 0,
+        count: 0
+      };
+    }
+
     const totals = revenueData.reduce(
       (acc, item) => ({
         totalRevenue: acc.totalRevenue + (item.total_revenue || 0),
         totalTransactions: acc.totalTransactions + (item.transaction_count || 0),
         totalCustomers: acc.totalCustomers + (item.customer_count || 0),
-        avgTransaction: (acc.avgTransaction * acc.count + (item.avg_transaction_value || 0)) / (acc.count + 1),
         count: acc.count + 1,
       }),
-      { totalRevenue: 0, totalTransactions: 0, totalCustomers: 0, avgTransaction: 0, count: 0 }
+      { totalRevenue: 0, totalTransactions: 0, totalCustomers: 0, count: 0 }
     );
+    
+    totals.avgTransaction = totals.totalTransactions > 0 ? 
+      totals.totalRevenue / totals.totalTransactions : 0;
+    
     return totals;
   };
 
@@ -161,11 +204,81 @@ export const RevenueAnalysis = () => {
           Revenue Analysis
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Financial performance analysis by country
+          Financial performance analysis by country with filters
         </p>
       </div>
 
-      <FilterPanel onFilterChange={setFilters} loading={loading} />
+      {/* Custom Filter Panel for Revenue Analysis */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Filter className="h-5 w-5 text-blue-600 mr-2" />
+            <h3 className="font-semibold text-gray-900 dark:text-white">Revenue Analysis Filters</h3>
+          </div>
+          <button
+            onClick={handleResetFilters}
+            className="flex items-center px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            Reset Filters
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Limit Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Show Top {filters.limit} Countries
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="50"
+              step="5"
+              value={filters.limit}
+              onChange={(e) => setFilters({...filters, limit: parseInt(e.target.value)})}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>5</span>
+              <span>50</span>
+            </div>
+          </div>
+
+          {/* Country Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Country
+            </label>
+            <select
+              value={filters.country}
+              onChange={(e) => setFilters({...filters, country: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Countries</option>
+              {availableFilters.countries.map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Year
+            </label>
+            <select
+              value={filters.year}
+              onChange={(e) => setFilters({...filters, year: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Years</option>
+              {availableFilters.years.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
       {/* Revenue Stats */}
       {!loading && revenueData.length > 0 && (
@@ -258,15 +371,23 @@ export const RevenueAnalysis = () => {
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No revenue data available
             </h3>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               Try adjusting your filters to see revenue analysis
             </p>
-            <button
-              onClick={fetchRevenueAnalysis}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Retry Loading
-            </button>
+            <div className="flex flex-col md:flex-row gap-3 justify-center">
+              <button
+                onClick={() => setFilters({...filters, country: 'all', year: 'all'})}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Show All Countries
+              </button>
+              <button
+                onClick={fetchRevenueAnalysis}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Retry Loading
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -280,7 +401,7 @@ export const RevenueAnalysis = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Showing {revenueData.length} countries • Total {totals.count} analyzed
+                    Showing {Math.min(filters.limit, revenueData.length)} of {revenueData.length} countries
                   </p>
                 </div>
                 <div className="text-right">
@@ -296,85 +417,6 @@ export const RevenueAnalysis = () => {
           </>
         )}
       </div>
-
-      {/* Insights */}
-      {!loading && revenueData.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card">
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Top Performing Countries
-            </h4>
-            <div className="space-y-4">
-              {[...revenueData]
-                .sort((a, b) => (b.total_revenue || 0) - (a.total_revenue || 0))
-                .slice(0, 3)
-                .map((item) => (
-                  <div
-                    key={item.country}
-                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {item.country}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {item.customer_count?.toLocaleString() || 0} customers
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900 dark:text-white">
-                        ${(item.total_revenue || 0).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </p>
-                      <p className="text-sm text-green-600">
-                        ${(item.revenue_per_customer || 0).toFixed(2)} per customer
-                      </p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-          <div className="card">
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Market Insights
-            </h4>
-            <ul className="space-y-3">
-              <li className="flex items-start">
-                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-bold text-green-600 dark:text-green-400">
-                    1
-                  </span>
-                </div>
-                <span className="ml-3 text-gray-700 dark:text-gray-300">
-                  Focus on high-value markets with revenue per customer &gt; $50
-                </span>
-              </li>
-              <li className="flex items-start">
-                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                    2
-                  </span>
-                </div>
-                <span className="ml-3 text-gray-700 dark:text-gray-300">
-                  Expand in markets with high transaction frequency
-                </span>
-              </li>
-              <li className="flex items-start">
-                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center mt-0.5">
-                  <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
-                    3
-                  </span>
-                </div>
-                <span className="ml-3 text-gray-700 dark:text-gray-300">
-                  Consider localization for markets with &gt; 5% market share
-                </span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

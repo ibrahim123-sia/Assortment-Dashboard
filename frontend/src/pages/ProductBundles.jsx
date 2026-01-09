@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FilterPanel } from '../components/FilterPanel';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Package, TrendingUp, DollarSign, Tag, RefreshCw, AlertCircle, ShoppingCart } from 'lucide-react';
+import { Package, TrendingUp, DollarSign, Tag, RefreshCw, AlertCircle, ShoppingCart, Filter, Globe } from 'lucide-react';
 
 export const ProductBundles = () => {
   const [loading, setLoading] = useState(false);
@@ -13,21 +12,41 @@ export const ProductBundles = () => {
     min_confidence: 0.3,
     min_transactions: 5,
     country: 'all',
-    year: 'all',
-    month: 'all',
-    hour: 'all',
     product: 'all',
-    weekday: 'all'
   });
+
+  const [availableFilters, setAvailableFilters] = useState({
+    countries: [],
+    products: []
+  });
+
+  useEffect(() => {
+    fetchAvailableFilters();
+  }, []);
 
   useEffect(() => {
     fetchBundles();
   }, [filters]);
 
+  const fetchAvailableFilters = async () => {
+    try {
+      const response = await axios.get('/api/filters');
+      if (response.data.success) {
+        setAvailableFilters({
+          countries: response.data.filters.countries || [],
+          products: response.data.filters.products || []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching filters:', error);
+    }
+  };
+
   const fetchBundles = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/suggested_bundles', {
+      // Use the filtered bundles endpoint
+      const response = await axios.get('/api/product_bundles_filtered', {
         params: filters,
       });
 
@@ -57,11 +76,7 @@ export const ProductBundles = () => {
       min_confidence: 0.3,
       min_transactions: 5,
       country: 'all',
-      year: 'all',
-      month: 'all',
-      hour: 'all',
       product: 'all',
-      weekday: 'all'
     });
   };
 
@@ -84,8 +99,7 @@ export const ProductBundles = () => {
             {value}
           </div>
           <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-            {row.products?.slice(0, 2).map(p => p.substring(0, 20)).join(' + ')}
-            {row.products?.length > 2 && ` + ${row.products.length - 2} more`}
+            Main products: {row.main_products?.slice(0, 2).map(p => p.substring(0, 20)).join(' + ')}
           </div>
         </div>
       ),
@@ -100,7 +114,7 @@ export const ProductBundles = () => {
             <ShoppingCart className="h-4 w-4 text-gray-400 mr-1" />
             <span className="font-bold text-gray-900 dark:text-white">{value || 0}</span>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">occurrences</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">co-occurrences</div>
         </div>
       ),
     },
@@ -111,12 +125,12 @@ export const ProductBundles = () => {
       render: (value) => (
         <div className="text-center">
           <span className="font-bold text-gray-900 dark:text-white">
-            {(value * 100).toFixed(1)}%
+            {value ? (value * 100).toFixed(1) + '%' : '0%'}
           </span>
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
             <div
               className="bg-green-600 h-1.5 rounded-full"
-              style={{ width: `${Math.min(value * 100, 100)}%` }}
+              style={{ width: `${value ? Math.min(value * 100, 100) : 0}%` }}
             ></div>
           </div>
         </div>
@@ -153,6 +167,7 @@ export const ProductBundles = () => {
           }`}
         >
           {typeof value === 'number' ? value.toFixed(2) : '0.00'}
+          {value > 1 && <TrendingUp className="inline-block ml-1 h-4 w-4" />}
         </div>
       ),
     },
@@ -176,32 +191,103 @@ export const ProductBundles = () => {
         </p>
       </div>
 
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={() => setFilters({...filters, min_confidence: 0.2})}
-          className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
-          <Package className="h-4 w-4 mr-2" />
-          Lower Confidence (20%)
-        </button>
-        <button
-          onClick={() => setFilters({...filters, min_transactions: 2})}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <ShoppingCart className="h-4 w-4 mr-2" />
-          Minimum 2 Transactions
-        </button>
-        <button
-          onClick={handleResetFilters}
-          className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Reset Filters
-        </button>
+      {/* Custom Filter Panel for Product Bundles */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Filter className="h-5 w-5 text-blue-600 mr-2" />
+            <h3 className="font-semibold text-gray-900 dark:text-white">Product Bundles Filters</h3>
+          </div>
+          <button
+            onClick={handleResetFilters}
+            className="flex items-center px-3 py-1.5 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Reset
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Confidence Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Min Confidence ({(filters.min_confidence * 100).toFixed(0)}%)
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.01"
+              value={filters.min_confidence}
+              onChange={(e) => setFilters({...filters, min_confidence: parseFloat(e.target.value)})}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>10%</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          {/* Transaction Count Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Min Transactions ({filters.min_transactions})
+            </label>
+            <input
+              type="range"
+              min="2"
+              max="50"
+              step="1"
+              value={filters.min_transactions}
+              onChange={(e) => setFilters({...filters, min_transactions: parseInt(e.target.value)})}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>2</span>
+              <span>50</span>
+            </div>
+          </div>
+
+          {/* Country Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <div className="flex items-center">
+                <Globe className="h-4 w-4 mr-1" />
+                Country
+              </div>
+            </label>
+            <select
+              value={filters.country}
+              onChange={(e) => setFilters({...filters, country: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Countries</option>
+              {availableFilters.countries.map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Product Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Base Product
+            </label>
+            <select
+              value={filters.product}
+              onChange={(e) => setFilters({...filters, product: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="all">All Products</option>
+              {availableFilters.products.slice(0, 50).map((product) => (
+                <option key={product} value={product}>{product.length > 30 ? product.substring(0, 30) + '...' : product}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
-      <FilterPanel onFilterChange={setFilters} loading={loading} />
+     
 
       {/* Bundle Stats */}
       {!loading && bundles.length > 0 && (
@@ -344,58 +430,14 @@ export const ProductBundles = () => {
               <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
                 Analyzed {metadata.top_products_analyzed} top products • 
                 Minimum {metadata.min_transactions} transactions per bundle • 
-                Filtered from {metadata.filtered_records} records
+                Filtered from {metadata.filtered_records} records • 
+                {metadata.filters_applied?.country && ` Country: ${metadata.filters_applied.country}`}
+                {metadata.filters_applied?.product && ` • Product: ${metadata.filters_applied.product}`}
               </div>
             )}
           </>
         )}
       </div>
-
-      {/* Action Section */}
-      {!loading && bundles.length > 0 && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div>
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Ready to implement these bundles?
-              </h4>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                These bundles are based on actual customer purchase patterns with {bundles.length} unique combinations
-              </p>
-            </div>
-            <div className="flex space-x-3 mt-4 md:mt-0">
-              <button 
-                onClick={() => {
-                  const csvContent = bundles.map(b => ({
-                    'Bundle ID': b.bundle_id,
-                    'Products': b.products.join(';'),
-                    'Confidence': `${(b.confidence * 100).toFixed(1)}%`,
-                    'Lift': b.lift.toFixed(2),
-                    'Transactions': b.transaction_count,
-                    'Estimated Revenue': `$${b.estimated_revenue.toFixed(2)}`
-                  }));
-                  console.log('Exporting bundles:', csvContent);
-                  alert('Export functionality would be implemented here');
-                }}
-                className="btn-secondary flex items-center"
-              >
-                <Package className="h-4 w-4 mr-2" />
-                Export as CSV
-              </button>
-              <button 
-                onClick={() => {
-                  const topBundle = bundles.sort((a, b) => b.confidence - a.confidence)[0];
-                  alert(`Create promotion for: ${topBundle.bundle_name}\nProducts: ${topBundle.products.join(', ')}\nConfidence: ${(topBundle.confidence * 100).toFixed(1)}%`);
-                }}
-                className="btn-primary flex items-center"
-              >
-                <DollarSign className="h-4 w-4 mr-2" />
-                Create Top Promotion
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
