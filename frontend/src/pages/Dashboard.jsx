@@ -84,6 +84,12 @@ export const Dashboard = () => {
       icon: Package,
       color: 'purple'
     },
+       {
+      title: 'Total Customers',
+      value: summary?.total_customers?.toLocaleString() || '0',
+      icon: Users,
+      color: 'green'
+    },
    
     {
       title: 'Total Revenue',

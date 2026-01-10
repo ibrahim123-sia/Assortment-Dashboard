@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { DataTable } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Database, BarChart, PieChart, LineChart, CheckCircle, AlertCircle, TrendingUp, RefreshCw } from 'lucide-react';
+import { Database, BarChart, PieChart, LineChart, CheckCircle, AlertCircle, TrendingUp, RefreshCw, Users } from 'lucide-react';
 
 export const DataSummary = () => {
   const [loading, setLoading] = useState(true);
@@ -272,7 +272,22 @@ export const DataSummary = () => {
           </div>
         </div>
 
-      
+        {/* Total Customers Card - Added */}
+        <div className="card">
+          <div className="flex items-center">
+            <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20">
+              <Users className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Total Customers
+              </p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {summary.total_customers?.toLocaleString() || '0'}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Detailed Sections */}

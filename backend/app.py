@@ -305,11 +305,11 @@ def map_column_names(df):
             if col != 'InvoiceNo':  # Only map if not already correct
                 column_mapping[col] = 'InvoiceNo'
     
-    # Map customer-related columns
+    # Map customer-related columns - ADDED 'customer id' (with space)
     customer_aliases = ['CustomerID', 'Customer', 'CustomerNo', 'ClientID', 'Client']
     for col in df_mapped.columns:
         col_lower = col.lower()
-        if col_lower in ['customerid', 'customer', 'customerno', 'clientid', 'client', 'custid']:
+        if col_lower in ['customerid', 'customer', 'customerno', 'clientid', 'client', 'custid', 'customer id']:
             if col != 'CustomerID':
                 column_mapping[col] = 'CustomerID'
     
@@ -974,127 +974,129 @@ def get_association_rules():
             "details": str(e) if debug else None
         }), 500
 
-@app.route('/api/suggested_bundles', methods=['GET'])
-@cache_response(max_age=600)
-def get_suggested_bundles():
+@app.route('/api/product_bundles_filtered', methods=['GET'])
+@cache_response(max_age=300)  # Reduced cache time
+def get_filtered_bundles():
     """
-    Generate suggested product bundles based on co-purchase patterns.
-    This endpoint is kept for backward compatibility.
-    For filtered bundles, use /api/product_bundles_filtered.
+    Optimized version with performance improvements
     """
     try:
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        # Check required columns
-        required_cols = ['InvoiceNo', 'Description']
-        is_valid, missing_cols = validate_dataframe_columns(df, required_cols)
-        if not is_valid:
-            return jsonify({
-                "success": False, 
-                "error": f"Missing required columns: {missing_cols}"
-            }), 400
+        # Get parameters with strict limits
+        min_confidence = max(0.05, min(1.0, float(request.args.get('min_confidence', 0.2))))  # Lower default
+        min_transactions = max(2, int(request.args.get('min_transactions', 3)))  # Lower default
+        max_products = min(30, max(10, int(request.args.get('max_products', 20))))  # Limit products analyzed
         
-        # Get parameters with validation
-        min_confidence = max(0.1, min(1.0, float(request.args.get('min_confidence', 0.3))))
-        limit = min(50, max(1, int(request.args.get('limit', 10))))
-        min_transactions = max(2, int(request.args.get('min_transactions', 5)))
+        # Early return for too strict filters
+        if min_confidence > 0.7 and min_transactions > 10:
+            return jsonify({
+                "success": True,
+                "bundles": [],
+                "note": "Filters too strict. Try lowering min_confidence or min_transactions."
+            })
         
         # Apply filters
         filters = {
             'country': request.args.get('country', 'all'),
             'year': request.args.get('year', 'all'),
             'month': request.args.get('month', 'all'),
-            'hour': request.args.get('hour', 'all'),
-            'product': request.args.get('product', 'all'),
-            'weekday': request.args.get('weekday', 'all')
+            'product': request.args.get('product', 'all')
         }
         
         filtered_df = apply_filters(df, filters)
         
-        if len(filtered_df) < 50:
+        if len(filtered_df) < 100:  # Increased minimum
             return jsonify({
                 "success": True,
                 "bundles": [],
-                "note": f"Insufficient data after filtering ({len(filtered_df)} records). Try broader filters."
+                "note": f"Insufficient data ({len(filtered_df)} records). Try broader filters."
             })
         
+        # OPTIMIZATION: Pre-calculate product transactions
+        transactions_by_product = {}
+        product_counts = filtered_df['Description'].value_counts()
+        top_products = product_counts.head(max_products).index.tolist()
+        
+        # Group by product first (much faster)
+        product_groups = filtered_df.groupby('Description')
+        
+        for product in top_products:
+            if product in product_groups.groups:
+                trans_set = set(product_groups.get_group(product)['InvoiceNo'].unique())
+                if len(trans_set) >= min_transactions:
+                    transactions_by_product[product] = trans_set
+        
+        # OPTIMIZATION: Use pre-calculated total transactions
+        total_transactions = filtered_df['InvoiceNo'].nunique()
+        
         bundles = []
+        product_list = list(transactions_by_product.keys())
         
-        # Get top products for analysis
-        top_products = filtered_df['Description'].value_counts().head(50).index.tolist()
-        
-        # Analyze product pairs
-        for i in range(len(top_products)):
-            product1 = top_products[i]
-            trans1 = set(filtered_df[filtered_df['Description'] == product1]['InvoiceNo'].unique())
+        # OPTIMIZATION: Limit comparisons significantly
+        for i in range(min(len(product_list), 20)):  # Max 20 base products
+            product1 = product_list[i]
+            trans1 = transactions_by_product[product1]
             
-            if len(trans1) < min_transactions:
-                continue
+            # Limit to top 15 comparisons per product
+            max_compare = min(15, len(product_list) - i - 1)
             
-            for j in range(i+1, min(i+20, len(top_products))):  # Limit comparisons for performance
-                product2 = top_products[j]
-                trans2 = set(filtered_df[filtered_df['Description'] == product2]['InvoiceNo'].unique())
+            for j in range(i+1, i+1 + max_compare):
+                if j >= len(product_list):
+                    break
+                    
+                product2 = product_list[j]
+                trans2 = transactions_by_product[product2]
                 
-                if len(trans2) < min_transactions:
-                    continue
-                
-                common_trans = trans1.intersection(trans2)
-                
-                if len(common_trans) >= min_transactions:
-                    # Calculate confidence in both directions
-                    confidence_1to2 = len(common_trans) / len(trans1) if len(trans1) > 0 else 0
-                    confidence_2to1 = len(common_trans) / len(trans2) if len(trans2) > 0 else 0
-                    confidence = max(confidence_1to2, confidence_2to1)
+                # Fast intersection with length check only
+                if len(trans1 & trans2) >= min_transactions:
+                    common_trans = trans1.intersection(trans2)
+                    confidence = len(common_trans) / min(len(trans1), len(trans2))
                     
                     if confidence >= min_confidence:
-                        # Calculate bundle metrics
-                        bundle_df = filtered_df[filtered_df['InvoiceNo'].isin(common_trans)]
-                        bundle_revenue = bundle_df['TotalAmount'].sum() if 'TotalAmount' in bundle_df.columns else 0
-                        avg_transaction_value = bundle_revenue / len(common_trans) if len(common_trans) > 0 else 0
-                        
-                        # Calculate lift
-                        total_transactions = filtered_df['InvoiceNo'].nunique()
-                        expected_cooccurrence = (len(trans1) * len(trans2)) / total_transactions if total_transactions > 0 else 0
-                        lift = len(common_trans) / expected_cooccurrence if expected_cooccurrence > 0 else 1
-                        
-                        # Get additional products in these transactions
-                        bundle_products = filtered_df[filtered_df['InvoiceNo'].isin(common_trans)]['Description'].unique()
+                        # Simplified metrics for speed
+                        lift = (len(common_trans) * total_transactions) / (len(trans1) * len(trans2))
                         
                         bundles.append({
                             "bundle_id": f"B{len(bundles)+1:03d}",
                             "products": [product1, product2],
-                            "product_count": 2,
-                            "bundle_name": f"{product1[:25]} & {product2[:25]}",
+                            "bundle_name": f"{product1[:20]} & {product2[:20]}",
                             "confidence": round(confidence, 3),
                             "lift": round(lift, 2),
-                            "estimated_revenue": float(bundle_revenue),
-                            "avg_transaction_value": round(float(avg_transaction_value), 2),
                             "transaction_count": len(common_trans),
-                            "popular_products_in_bundle": list(bundle_products[:5]) if len(bundle_products) > 0 else []
+                            "popular_products_in_bundle": []  # Skip for performance
                         })
+                        
+                        # Limit total bundles
+                        if len(bundles) >= 50:
+                            break
+            
+            if len(bundles) >= 50:
+                break
         
-        # Sort bundles by confidence and transaction count
+        # Sort and limit
         bundles.sort(key=lambda x: (x['confidence'], x['transaction_count']), reverse=True)
         
         return jsonify({
             "success": True,
-            "bundles": bundles[:limit],
+            "bundles": bundles[:20],  # Return max 20
             "total_bundles_found": len(bundles),
             "metadata": {
                 "min_confidence": min_confidence,
                 "min_transactions": min_transactions,
                 "filtered_records": len(filtered_df),
-                "top_products_analyzed": len(top_products)
+                "products_analyzed": len(product_list),
+                "filters_applied": filters,
+                "execution_time_ms": 0  # You can add timing
             }
         })
         
     except Exception as e:
-        print(f"❌ Error in get_suggested_bundles: {e}")
+        print(f"Error in get_filtered_bundles: {e}")
         return jsonify({
             "success": False, 
-            "error": "Failed to generate product bundles",
-            "details": str(e) if debug else None
+            "error": "Failed to generate bundles. Try adjusting filters."
         }), 500
 
 @app.route('/api/revenue_analysis', methods=['GET'])

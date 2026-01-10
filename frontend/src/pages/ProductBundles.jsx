@@ -290,7 +290,7 @@ export const ProductBundles = () => {
      
 
       {/* Bundle Stats */}
-      {!loading && bundles.length > 0 && (
+      {/* {!loading && bundles.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-center">
@@ -317,7 +317,7 @@ export const ProductBundles = () => {
                   Total Revenue
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${totalRevenue}
                 </p>
               </div>
             </div>
@@ -353,7 +353,7 @@ export const ProductBundles = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Bundles Table */}
       <div className="card">
