@@ -136,22 +136,22 @@ export const ProductBundles = () => {
         </div>
       ),
     },
-    {
-      key: 'estimated_revenue',
-      title: 'Est. Revenue',
-      sortable: true,
-      render: (value) => (
-        <div className="text-right">
-          <div className="flex items-center justify-end">
-            <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
-            <span className="font-bold text-gray-900 dark:text-white">
-              ${typeof value === 'number' ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-            </span>
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">total revenue</div>
-        </div>
-      ),
-    },
+    // {
+    //   key: 'estimated_revenue',
+    //   title: 'Est. Revenue',
+    //   sortable: true,
+    //   render: (value) => (
+    //     <div className="text-right">
+    //       <div className="flex items-center justify-end">
+    //         <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
+    //         <span className="font-bold text-gray-900 dark:text-white">
+    //           ${typeof value === 'number' ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+    //         </span>
+    //       </div>
+    //       <div className="text-xs text-gray-500 dark:text-gray-400">total revenue</div>
+    //     </div>
+    //   ),
+    // },
     {
       key: 'lift',
       title: 'Lift',
