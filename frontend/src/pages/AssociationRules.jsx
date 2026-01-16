@@ -123,7 +123,7 @@ export const AssociationRules = () => {
       } else {
         setError({
           type: 'api_error',
-          message: 'API returned an error',
+          message: 'Failed to generate association rules',
           details: response.data.error || 'Unknown error'
         });
         setRules([]);
