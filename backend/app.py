@@ -568,14 +568,14 @@ def get_association_rules():
         
         filtered_df = apply_filters(df, filters)
         
-        if len(filtered_df) < 50:
+        if len(filtered_df) < 100:  # Changed from 50 to 100 to match bundle route
             return jsonify({
                 "success": True,
                 "data": [],
                 "message": "Insufficient data available with the selected filters. Please try broader filters or select a different country.",
                 "metadata": {
                     "filtered_records": len(filtered_df),
-                    "minimum_recommended": 100,
+                    "minimum_required": 100,  # Changed from 100 to 100
                     "processing_time": round(time.time() - start_time, 2)
                 }
             })
@@ -746,19 +746,16 @@ def get_association_rules():
 @cache_response(max_age=300)
 def get_filtered_bundles():
     try:
+        start_time = time.time()
+        
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        min_confidence = max(0.05, min(1.0, float(request.args.get('min_confidence', 0.2))))
-        min_transactions = max(2, int(request.args.get('min_transactions', 3)))
-        max_products = min(30, max(10, int(request.args.get('max_products', 20))))
-        
-        if min_confidence > 0.7 and min_transactions > 10:
-            return jsonify({
-                "success": True,
-                "bundles": [],
-                "message": "No product bundles found. Try using less strict filter criteria."
-            })
+        # ALIGNED PARAMETERS with association_rules
+        min_support = max(0.001, float(request.args.get('min_support', 0.01)))
+        min_confidence = max(0.1, float(request.args.get('min_confidence', 0.3)))
+        min_lift = max(0.5, float(request.args.get('min_lift', 1.0)))
+        limit = min(100, max(1, int(request.args.get('limit', 50))))
         
         filters = {
             'country': request.args.get('country', 'all'),
@@ -773,100 +770,168 @@ def get_filtered_bundles():
             return jsonify({
                 "success": True,
                 "bundles": [],
-                "message": f"Not enough data available ({len(filtered_df)} records) to generate product bundles. Try selecting different filters.",
+                "message": f"Not enough data available ({len(filtered_df)} records).",
                 "metadata": {
                     "filtered_records": len(filtered_df),
-                    "minimum_required": 100
+                    "minimum_required": 100,
+                    "processing_time": round(time.time() - start_time, 2)
                 }
             })
         
-        transactions_by_product = {}
-        product_counts = filtered_df['Description'].value_counts()
-        top_products = product_counts.head(max_products).index.tolist()
+        # SAME as association_rules: Top 100 products
+        top_products = filtered_df['Description'].value_counts().head(100).index.tolist()
+        df_top = filtered_df[filtered_df['Description'].isin(top_products)]
         
-        product_groups = filtered_df.groupby('Description')
-        
-        for product in top_products:
-            if product in product_groups.groups:
-                trans_set = set(product_groups.get_group(product)['InvoiceNo'].unique())
-                if len(trans_set) >= min_transactions:
-                    transactions_by_product[product] = trans_set
-        
-        total_transactions = filtered_df['InvoiceNo'].nunique()
-        
-        bundles = []
-        product_list = list(transactions_by_product.keys())
-        
-        if len(product_list) < 2:
+        if len(df_top) < 50:
             return jsonify({
                 "success": True,
                 "bundles": [],
-                "message": "Insufficient products found for bundle analysis with current filters.",
+                "message": "Not enough transaction data for analysis.",
                 "metadata": {
-                    "products_available": len(product_list),
-                    "minimum_required": 2
+                    "processing_time": round(time.time() - start_time, 2)
                 }
             })
         
-        for i in range(min(len(product_list), 20)):
-            product1 = product_list[i]
-            trans1 = transactions_by_product[product1]
-            
-            max_compare = min(15, len(product_list) - i - 1)
-            
-            for j in range(i+1, i+1 + max_compare):
-                if j >= len(product_list):
-                    break
-                    
-                product2 = product_list[j]
-                trans2 = transactions_by_product[product2]
-                
-                if len(trans1 & trans2) >= min_transactions:
-                    common_trans = trans1.intersection(trans2)
-                    confidence = len(common_trans) / min(len(trans1), len(trans2))
-                    
-                    if confidence >= min_confidence:
-                        lift = (len(common_trans) * total_transactions) / (len(trans1) * len(trans2))
-                        
-                        bundles.append({
-                            "bundle_id": f"B{len(bundles)+1:03d}",
-                            "products": [product1, product2],
-                            "bundle_name": f"{product1[:20]} & {product2[:20]}",
-                            "confidence": round(confidence, 3),
-                            "lift": round(lift, 2),
-                            "transaction_count": len(common_trans),
-                            "popular_products_in_bundle": []
-                        })
-                        
-                        if len(bundles) >= 50:
-                            break
-            
-            if len(bundles) >= 50:
-                break
+        # SAME basket preparation
+        basket = (df_top.groupby(['InvoiceNo', 'Description'])['Quantity']
+                  .sum()
+                  .unstack(fill_value=0)
+                  .reset_index()
+                  .set_index('InvoiceNo'))
         
-        bundles.sort(key=lambda x: (x['confidence'], x['transaction_count']), reverse=True)
+        basket_sets = (basket > 0).astype(int)
+        
+        # SAME filtering: products with at least 3 transactions
+        column_sums = basket_sets.sum()
+        columns_to_keep = column_sums[column_sums >= 3].index.tolist()
+        basket_sets = basket_sets[columns_to_keep]
+        
+        if len(basket_sets.columns) < 2:
+            return jsonify({
+                "success": True,
+                "bundles": [],
+                "message": "Insufficient products for bundle analysis.",
+                "metadata": {
+                    "processing_time": round(time.time() - start_time, 2)
+                }
+            })
+        
+        # SAME apriori algorithm
+        frequent_itemsets = apriori(
+            basket_sets, 
+            min_support=min_support, 
+            use_colnames=True,
+            max_len=2,  # SAME: 2 items only
+            low_memory=True,
+            verbose=0
+        )
+        
+        if len(frequent_itemsets) == 0:
+            adjusted_support = max(0.0005, min_support / 2)
+            frequent_itemsets = apriori(
+                basket_sets, 
+                min_support=adjusted_support, 
+                use_colnames=True,
+                max_len=2,
+                low_memory=True,
+                verbose=0
+            )
+            min_support = adjusted_support
+        
+        if len(frequent_itemsets) == 0:
+            return jsonify({
+                "success": True,
+                "bundles": [],
+                "message": "No product associations found.",
+                "metadata": {
+                    "processing_time": round(time.time() - start_time, 2)
+                }
+            })
+        
+        # SAME association rules generation
+        rules = association_rules(
+            frequent_itemsets, 
+            metric="confidence", 
+            min_threshold=min_confidence
+        )
+        
+        rules = rules[rules['lift'] >= min_lift]
+        
+        if len(rules) == 0:
+            return jsonify({
+                "success": True,
+                "bundles": [],
+                "message": "No strong product bundles found.",
+                "metadata": {
+                    "processing_time": round(time.time() - start_time, 2)
+                }
+            })
+        
+        rules = rules.sort_values(['confidence', 'lift'], ascending=False)
+        rules = remove_duplicate_rules(rules)  # ADD THIS FUNCTION
+        
+        # DERIVE BUNDLES FROM ASSOCIATION RULES
+        bundles = []
+        
+        for idx, rule in rules.head(limit).iterrows():
+            antecedents = list(rule['antecedents'])
+            consequents = list(rule['consequents'])
+            
+            if not antecedents or not consequents:
+                continue
+            
+            antecedent_name = next(iter(antecedents))
+            consequent_name = next(iter(consequents))
+            
+            # Calculate transaction count from support
+            total_transactions = len(basket_sets)
+            transaction_count = int(rule['support'] * total_transactions)
+            
+            bundles.append({
+                "bundle_id": f"B{len(bundles)+1:03d}",
+                "products": [antecedent_name, consequent_name],
+                "bundle_name": f"{antecedent_name[:30]} & {consequent_name[:30]}",
+                "confidence": round(float(rule['confidence']), 3),
+                "lift": round(float(rule['lift']), 2),
+                "transaction_count": transaction_count,
+                "support": round(float(rule['support']), 4),
+                "antecedent": antecedent_name,
+                "consequent": consequent_name,
+                "antecedent_support": round(float(rule['antecedent support']), 4),
+                "consequent_support": round(float(rule['consequent support']), 4)
+            })
+        
+        processing_time = round(time.time() - start_time, 2)
         
         if len(bundles) == 0:
             return jsonify({
                 "success": True,
                 "bundles": [],
-                "message": "No product bundles found matching your criteria. Try adjusting confidence threshold or selecting different filters.",
+                "message": "No product bundles found matching criteria.",
                 "metadata": {
-                    "min_confidence": min_confidence,
-                    "min_transactions": min_transactions,
-                    "products_analyzed": len(product_list)
+                    "processing_time": processing_time
                 }
             })
         
+        # Return bundles
         return jsonify({
             "success": True,
-            "bundles": bundles[:20],
+            "bundles": bundles,
             "total_bundles_found": len(bundles),
             "metadata": {
-                "min_confidence": min_confidence,
-                "min_transactions": min_transactions,
-                "filtered_records": len(filtered_df),
-                "products_analyzed": len(product_list),
+                "processing_time": processing_time,
+                "parameters": {
+                    "min_support": min_support,
+                    "min_confidence": min_confidence,
+                    "min_lift": min_lift,
+                    "limit": limit
+                },
+                "filter_stats": {
+                    "original_records": len(df),
+                    "filtered_records": len(filtered_df),
+                    "products_in_analysis": len(basket_sets.columns),
+                    "transactions_in_analysis": len(basket_sets)
+                },
                 "filters_applied": filters
             }
         })
@@ -875,97 +940,7 @@ def get_filtered_bundles():
         return jsonify({
             "success": False, 
             "error": "Failed to generate product bundles",
-            "message": "Unable to create product bundles with current filters. Please try adjusting your selection.",
-            "details": str(e) if debug else None
-        }), 500
-
-# --- REVENUE ANALYSIS ENDPOINT ---
-@app.route('/api/revenue_analysis', methods=['GET'])
-@cache_response(max_age=300)
-def get_revenue_analysis():
-    try:
-        if df is None or len(df) == 0:
-            return jsonify({"success": False, "error": "Data not loaded"}), 400
-        
-        limit = min(50, max(1, int(request.args.get('limit', 20))))
-        
-        if 'Country' not in df.columns or 'TotalAmount' not in df.columns:
-            return jsonify({
-                "success": False,
-                "error": "Required columns (Country, TotalAmount) not found in data",
-                "available_columns": list(df.columns)
-            }), 400
-        
-        if 'CustomerID' in df.columns:
-            agg_dict = {
-                'TotalAmount': ['sum', 'mean', 'count'],
-                'InvoiceNo': 'nunique',
-                'CustomerID': 'nunique',
-                'Description': 'nunique'
-            }
-        else:
-            agg_dict = {
-                'TotalAmount': ['sum', 'mean', 'count'],
-                'InvoiceNo': 'nunique',
-                'Description': 'nunique'
-            }
-        
-        country_revenue = df.groupby('Country').agg(agg_dict).round(2).reset_index()
-        
-        if 'CustomerID' in df.columns:
-            country_revenue.columns = ['Country', 'total_revenue', 'avg_revenue', 'record_count', 
-                                       'transaction_count', 'customer_count', 'product_variety']
-        else:
-            country_revenue.columns = ['Country', 'total_revenue', 'avg_revenue', 'record_count', 
-                                       'transaction_count', 'product_variety']
-            country_revenue['customer_count'] = 0
-        
-        country_revenue = country_revenue.sort_values('total_revenue', ascending=False)
-        
-        revenue_analysis = []
-        global_total_revenue = df['TotalAmount'].sum()
-        
-        for idx, row in country_revenue.head(limit).iterrows():
-            country_df = df[df['Country'] == row['Country']]
-            
-            if 'InvoiceNo' in country_df.columns and 'TotalAmount' in country_df.columns:
-                transaction_values = country_df.groupby('InvoiceNo')['TotalAmount'].sum()
-                avg_transaction = transaction_values.mean() if not transaction_values.empty else 0
-            else:
-                avg_transaction = 0
-            
-            revenue_per_customer = row['total_revenue'] / row['customer_count'] if row['customer_count'] > 0 else 0
-            products_per_transaction = row['product_variety'] / row['transaction_count'] if row['transaction_count'] > 0 else 0
-            
-            revenue_analysis.append({
-                "country": str(row['Country']),
-                "total_revenue": float(row['total_revenue']),
-                "transaction_count": int(row['transaction_count']),
-                "customer_count": int(row['customer_count']),
-                "product_variety": int(row['product_variety']),
-                "avg_transaction_value": float(avg_transaction),
-                "revenue_per_customer": round(float(revenue_per_customer), 2),
-                "products_per_transaction": round(float(products_per_transaction), 2),
-                "market_share": round((row['total_revenue'] / global_total_revenue * 100), 2) if global_total_revenue > 0 else 0,
-                "records": int(row['record_count'])
-            })
-        
-        return jsonify({
-            "success": True,
-            "revenue_analysis": revenue_analysis,
-            "analysis_type": "country_revenue",
-            "metadata": {
-                "total_countries_analyzed": len(country_revenue),
-                "global_total_revenue": float(global_total_revenue),
-                "global_avg_transaction": float(df.groupby('InvoiceNo')['TotalAmount'].sum().mean()) 
-                    if 'InvoiceNo' in df.columns and 'TotalAmount' in df.columns else 0
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({
-            "success": False, 
-            "error": "Failed to analyze revenue data",
+            "message": "Unable to create product bundles.",
             "details": str(e) if debug else None
         }), 500
 
@@ -1378,7 +1353,7 @@ def get_revenue_by_country():
             "details": str(e) if debug else None
         }), 500
 
-# --- FREQUENT ITEMSETS ENDPOINT THIS IS NETWORK GRAPH WHICH WE ARE NOT USING---
+# --- FREQUENT ITEMSETS ENDPOINT THIS IS NETWORK GRAPH WHICH WE ARE---
 @app.route('/api/frequent_itemsets', methods=['GET'])
 @cache_response(max_age=600)
 def get_frequent_itemsets():
