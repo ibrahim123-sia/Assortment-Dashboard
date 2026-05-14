@@ -149,12 +149,33 @@ def export_csv():
     if df is None:
         return jsonify({"error": "No active dataset", "code": "no_dataset"}), 409
     kind = request.args.get("type", "top_products")
+    import pandas as pd
     if kind == "top_products":
-        out_df = __import__("pandas").DataFrame(analytics_service.compute_top_products(df, limit=200).get("products", []))
+        out_df = pd.DataFrame(analytics_service.compute_top_products(df, limit=200).get("products", []))
     elif kind == "summary":
-        out_df = __import__("pandas").DataFrame([analytics_service.compute_summary(df)])
+        out_df = pd.DataFrame([analytics_service.compute_summary(df)])
     elif kind == "raw":
         out_df = df.head(50000)
+    elif kind == "recommendations":
+        from app.services import insights_service
+        result = insights_service.compute_recommendations(df, product_name=None, limit=10)
+        rows = []
+        for prod, recs in (result.get("per_product") or {}).items():
+            for r in recs:
+                rows.append({
+                    "source_product": prod,
+                    "recommended_product": r["product"],
+                    "co_purchase_count": r["co_purchase_count"],
+                    "confidence": r["confidence"],
+                    "lift": r["lift"],
+                    "co_purchase_rate_pct": r["co_purchase_rate"],
+                    "score": r["score"],
+                })
+        out_df = pd.DataFrame(rows)
+    elif kind == "customer_segments":
+        from app.services import insights_service
+        result = insights_service.compute_rfm(df)
+        out_df = pd.DataFrame(result.get("top_customers", []))
     else:
         return jsonify({"error": "Unknown export type", "code": "bad_type"}), 400
     buf = export_service.dataframe_to_csv_stream(out_df)

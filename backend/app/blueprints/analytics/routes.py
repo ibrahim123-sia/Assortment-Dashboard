@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request, g
 
 from app.decorators import store_manager_required
 from app.services import dataset_service, cache_service
-from app.services import analytics_service, mba_service
+from app.services import analytics_service, mba_service, insights_service
 from app.utils.filters import apply_filters, extract_filters_from_args
 
 bp = Blueprint("analytics", __name__)
@@ -167,6 +167,73 @@ def filters():
     key = _cache_key("filters", dataset.id)
     data = cache_service.get_or_set(key, lambda: analytics_service.compute_filters(df))
     return jsonify({"success": True, "filters": data, "timestamp": datetime.utcnow().isoformat()})
+
+
+@bp.route("/recommendations", methods=["GET"])
+@store_manager_required
+def recommendations():
+    df, dataset, err = _df_or_error()
+    if err:
+        return err
+    product = request.args.get("product", "").strip()
+    limit = min(50, max(1, int(request.args.get("limit", 10))))
+    min_co = max(1, int(request.args.get("min_co_occurrence", 3)))
+    key = _cache_key("recommendations", dataset.id)
+    result = cache_service.get_or_set(
+        key, lambda: insights_service.compute_recommendations(df, product or None, limit, min_co)
+    )
+    return jsonify({"success": True, **result})
+
+
+@bp.route("/customer_segments", methods=["GET"])
+@store_manager_required
+def customer_segments():
+    df, dataset, err = _df_or_error()
+    if err:
+        return err
+    key = _cache_key("customer_segments", dataset.id)
+    result = cache_service.get_or_set(key, lambda: insights_service.compute_rfm(df))
+    return jsonify({"success": True, **result})
+
+
+@bp.route("/period_comparison", methods=["GET"])
+@store_manager_required
+def period_comparison():
+    df, dataset, err = _df_or_error()
+    if err:
+        return err
+    period_days = min(365, max(1, int(request.args.get("period_days", 30))))
+    end_date = request.args.get("end_date")
+    key = _cache_key("period_comparison", dataset.id)
+    result = cache_service.get_or_set(
+        key, lambda: insights_service.compute_period_comparison(df, period_days, end_date)
+    )
+    return jsonify({"success": True, **result})
+
+
+@bp.route("/cohort_retention", methods=["GET"])
+@store_manager_required
+def cohort_retention():
+    df, dataset, err = _df_or_error()
+    if err:
+        return err
+    max_periods = min(24, max(3, int(request.args.get("max_periods", 12))))
+    key = _cache_key("cohort_retention", dataset.id)
+    result = cache_service.get_or_set(key, lambda: insights_service.compute_cohort_retention(df, max_periods))
+    return jsonify({"success": True, **result})
+
+
+@bp.route("/bundle_simulator", methods=["POST"])
+@store_manager_required
+def bundle_simulator():
+    df, dataset, err = _df_or_error()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    products = data.get("products") or []
+    discount_pct = float(data.get("discount_pct", 10.0))
+    result = insights_service.simulate_bundle(df, products, discount_pct)
+    return jsonify({"success": "error" not in result, **result})
 
 
 @bp.route("/product_stats", methods=["GET"])

@@ -68,6 +68,7 @@ def compute_association_rules(df, min_support=0.01, min_confidence=0.3, min_lift
 
     rules = rules.sort_values(["confidence", "lift"], ascending=False)
     rules = remove_duplicate_rules(rules)
+    rules = rules.sort_values(["confidence", "lift"], ascending=False).reset_index(drop=True)
 
     formatted = []
     for _, rule in rules.head(limit).iterrows():
@@ -131,6 +132,7 @@ def compute_product_bundles(df, min_support=0.01, min_confidence=0.3, min_lift=1
         return {"success": True, "bundles": [], "message": "No strong bundles.", "metadata": {"processing_time": round(time.time() - start, 2)}}
     rules = rules.sort_values(["confidence", "lift"], ascending=False)
     rules = remove_duplicate_rules(rules)
+    rules = rules.sort_values(["confidence", "lift"], ascending=False).reset_index(drop=True)
 
     bundles = []
     total_tx = len(basket_sets)

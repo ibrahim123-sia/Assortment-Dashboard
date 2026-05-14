@@ -23,6 +23,9 @@ import { Settings } from './pages/store/Settings';
 import { Datasets } from './pages/store/Datasets';
 import { ScheduledJob } from './pages/store/ScheduledJob';
 import { Exports } from './pages/store/Exports';
+import { Recommendations } from './pages/store/Recommendations';
+import { Customers } from './pages/store/Customers';
+import { Trends } from './pages/store/Trends';
 
 import { Dashboard } from './pages/Dashboard';
 import { AssociationRules } from './pages/AssociationRules';
@@ -68,6 +71,9 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/association-rules" element={<AssociationRules />} />
               <Route path="/product-bundles" element={<ProductBundles />} />
+              <Route path="/recommendations" element={<Recommendations />} />
+              <Route path="/customers" element={<Customers />} />
+              <Route path="/trends" element={<Trends />} />
               <Route path="/revenue-analysis" element={<RevenueAnalysis />} />
               <Route path="/seasonal-analysis" element={<SeasonalAnalysis />} />
               <Route path="/network-view" element={<NetworkView />} />
