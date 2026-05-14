@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Scheduled summary</title></head>
+<body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color:#1f2937;">
+  <h2 style="color:#2563eb;">{{ store.name }} - Analytics Summary</h2>
+  <p>Generated at: {{ summary.generated_at }}</p>
+  {% if summary.summary %}
+  <h3>Key metrics</h3>
+  <ul>
+    <li>Total revenue: ${{ '%.2f'|format(summary.summary.total_revenue or 0) }}</li>
+    <li>Total transactions: {{ summary.summary.total_transactions }}</li>
+    <li>Total products: {{ summary.summary.total_products }}</li>
+    <li>Total customers: {{ summary.summary.total_customers }}</li>
+  </ul>
+  {% endif %}
+  {% if summary.rules %}
+  <h3>Top association rules</h3>
+  <ol>
+    {% for r in summary.rules[:10] %}
+    <li><strong>{{ r.antecedent }}</strong> &rarr; <strong>{{ r.consequent }}</strong> (confidence {{ r.confidence }}, lift {{ r.lift }})</li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+</body></html>

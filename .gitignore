@@ -1,0 +1,102 @@
+# ===== Python / Backend =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# Virtualenvs
+venv/
+env/
+ENV/
+.venv/
+.env.local
+
+# Secrets / env files
+.env
+backend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.production.local
+
+# Flask / app runtime artifacts
+instance/
+.webassets-cache
+backend/data/app.sqlite
+backend/data/app.sqlite-journal
+backend/data/stores/
+backend/data/exports/
+
+# Migrations: track schema definitions but ignore Alembic cache
+backend/migrations/__pycache__/
+backend/migrations/versions/__pycache__/
+
+# Legacy artifacts kept locally
+backend/legacy/__pycache__/
+
+# Tests
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ===== Node / Frontend =====
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+.parcel-cache/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ===== Data files =====
+# Per-store uploads live in backend/data/stores/ (ignored above).
+# Reference / demo CSVs in /data/ stay tracked - they ship with the repo.
+# Add specific patterns here if you drop new large files in data/ that
+# shouldn't be committed, e.g.:
+#   data/*-private.csv
+
+# Notebook checkpoints
+notebook/.ipynb_checkpoints/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytype/

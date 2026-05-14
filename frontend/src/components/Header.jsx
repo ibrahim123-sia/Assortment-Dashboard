@@ -1,8 +1,28 @@
-import { Sun, Moon, Menu, X, BarChart3 } from 'lucide-react';
+import { Sun, Moon, Menu, X, BarChart3, LogOut } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
-export const Header = ({ toggleSidebar, isSidebarOpen }) => {
+const initials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+};
+
+export const Header = ({ toggleSidebar, isSidebarOpen, title, subtitle }) => {
   const { isDark, toggleTheme } = useTheme();
+  const { user, store, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const onLogout = async () => {
+    await logout();
+    toast.success('Signed out');
+    navigate('/login');
+  };
+
+  const displayName = user?.full_name || user?.email || 'User';
+  const roleLabel = user?.role === 'super_admin' ? 'Super Admin' : (store?.name || 'Store Manager');
 
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
@@ -18,16 +38,12 @@ export const Header = ({ toggleSidebar, isSidebarOpen }) => {
             <div className="flex items-center ml-2 lg:ml-0">
               <BarChart3 className="h-8 w-8 text-primary-600" />
               <div className="ml-3">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Market Basket Analysis
-                </h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Intelligent Product Assortment Dashboard
-                </p>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">{title || 'Assortment Dashboard'}</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle || 'Market Basket Analytics'}</p>
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -37,15 +53,20 @@ export const Header = ({ toggleSidebar, isSidebarOpen }) => {
             </button>
             <div className="hidden sm:flex items-center space-x-2">
               <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
-                <span className="text-sm font-medium text-primary-600 dark:text-primary-300">
-                  AD
-                </span>
+                <span className="text-sm font-medium text-primary-600 dark:text-primary-300">{initials(displayName)}</span>
               </div>
               <div className="text-sm">
-                <p className="font-medium text-gray-900 dark:text-white">Admin</p>
-                <p className="text-gray-500 dark:text-gray-400">Administrator</p>
+                <p className="font-medium text-gray-900 dark:text-white">{displayName}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs">{roleLabel}</p>
               </div>
             </div>
+            <button
+              onClick={onLogout}
+              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-red-100 dark:hover:bg-red-900/20 text-gray-700 dark:text-gray-300 hover:text-red-600 transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
       </div>

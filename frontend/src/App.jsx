@@ -1,75 +1,96 @@
-// App.jsx
-import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './context/ThemeContext';
-import { Header } from './components/Header';
-import { Sidebar } from './components/Sidebar';
+import { AuthProvider } from './context/AuthContext';
+
+import { Login } from './pages/auth/Login';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { ResetPassword } from './pages/auth/ResetPassword';
+
+import { ProtectedRoute } from './routes/ProtectedRoute';
+import { RoleRoute } from './routes/RoleRoute';
+import { RoleRedirect } from './routes/RoleRedirect';
+
+import { AdminLayout } from './layouts/AdminLayout';
+import { StoreLayout } from './layouts/StoreLayout';
+
+import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { Stores } from './pages/admin/Stores';
+import { StoreForm } from './pages/admin/StoreForm';
+import { AuditLog } from './pages/admin/AuditLog';
+
+import { Settings } from './pages/store/Settings';
+import { Datasets } from './pages/store/Datasets';
+import { ScheduledJob } from './pages/store/ScheduledJob';
+import { Exports } from './pages/store/Exports';
+
 import { Dashboard } from './pages/Dashboard';
 import { AssociationRules } from './pages/AssociationRules';
 import { ProductBundles } from './pages/ProductBundles';
 import { RevenueAnalysis } from './pages/RevenueAnalysis';
 import { SeasonalAnalysis } from './pages/SeasonalAnalysis';
 import { NetworkView } from './pages/NetworkView';
-import { DataSummary } from './pages/DataSummary'; // Add this import
+import { DataSummary } from './pages/DataSummary';
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const closeSidebar = () => setSidebarOpen(false);
-
   return (
     <ThemeProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-          <Header toggleSidebar={toggleSidebar} isSidebarOpen={sidebarOpen} />
-          
-          <div className="flex">
-            <Sidebar isOpen={sidebarOpen} />
-            
-            <main 
-              className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto"
-              onClick={() => sidebarOpen && closeSidebar()}
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+
+            <Route path="/" element={<RoleRedirect />} />
+
+            <Route
+              path="/admin"
+              element={
+                <RoleRoute roles={['super_admin']}>
+                  <AdminLayout />
+                </RoleRoute>
+              }
             >
-              <div className="max-w-7xl mx-auto">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/association-rules" element={<AssociationRules />} />
-                  <Route path="/product-bundles" element={<ProductBundles />} />
-                  <Route path="/revenue-analysis" element={<RevenueAnalysis />} />
-                  <Route path="/seasonal-analysis" element={<SeasonalAnalysis />} />
-                  <Route path="/network-view" element={<NetworkView />} />
-                  <Route path="/data-summary" element={<DataSummary />} /> {/* Add this route */}
-                </Routes>
-              </div>
-            </main>
-          </div>
-        </div>
-        
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3000,
-            style: {
-              background: '#1f2937',
-              color: '#fff',
-            },
-            success: {
+              <Route index element={<AdminDashboard />} />
+              <Route path="stores" element={<Stores />} />
+              <Route path="stores/new" element={<StoreForm />} />
+              <Route path="audit-log" element={<AuditLog />} />
+            </Route>
+
+            <Route
+              element={
+                <ProtectedRoute>
+                  <StoreLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/association-rules" element={<AssociationRules />} />
+              <Route path="/product-bundles" element={<ProductBundles />} />
+              <Route path="/revenue-analysis" element={<RevenueAnalysis />} />
+              <Route path="/seasonal-analysis" element={<SeasonalAnalysis />} />
+              <Route path="/network-view" element={<NetworkView />} />
+              <Route path="/data-summary" element={<DataSummary />} />
+
+              <Route path="/store/settings" element={<Settings />} />
+              <Route path="/store/datasets" element={<Datasets />} />
+              <Route path="/store/scheduled-job" element={<ScheduledJob />} />
+              <Route path="/store/exports" element={<Exports />} />
+            </Route>
+          </Routes>
+
+          <Toaster
+            position="top-right"
+            toastOptions={{
               duration: 3000,
-              style: {
-                background: '#10b981',
-              },
-            },
-            error: {
-              duration: 4000,
-              style: {
-                background: '#ef4444',
-              },
-            },
-          }}
-        />
-      </Router>
+              style: { background: '#1f2937', color: '#fff' },
+              success: { duration: 3000, style: { background: '#10b981' } },
+              error: { duration: 4000, style: { background: '#ef4444' } },
+            }}
+          />
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

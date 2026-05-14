@@ -1,0 +1,115 @@
+"""PDF (ReportLab) + CSV exports."""
+import io
+import os
+import uuid
+from datetime import datetime
+
+import pandas as pd
+from flask import current_app
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+
+
+def _exports_dir(store_id):
+    base = os.path.join(current_app.config["STORES_DIR"], str(store_id), "exports")
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _brand_color(store):
+    try:
+        c = store.brand_primary_color
+        if c and c.startswith("#") and len(c) == 7:
+            r = int(c[1:3], 16) / 255.0
+            g = int(c[3:5], 16) / 255.0
+            b = int(c[5:7], 16) / 255.0
+            return colors.Color(r, g, b)
+    except Exception:
+        pass
+    return colors.HexColor("#2563eb")
+
+
+def generate_pdf_report(store, sections, payloads):
+    export_id = str(uuid.uuid4())
+    out_dir = _exports_dir(store.id)
+    out_path = os.path.join(out_dir, f"{export_id}.pdf")
+    doc = SimpleDocTemplate(out_path, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm)
+    styles = getSampleStyleSheet()
+    brand = _brand_color(store)
+    title_style = ParagraphStyle("Title", parent=styles["Title"], textColor=brand, fontSize=24, spaceAfter=12)
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], textColor=brand)
+
+    story = []
+    story.append(Paragraph(store.name, title_style))
+    story.append(Paragraph(f"Market Basket Analytics Report", styles["Heading3"]))
+    story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    if "summary" in sections and payloads.get("summary"):
+        s = payloads["summary"]
+        story.append(Paragraph("Executive Summary", h2))
+        rows = [
+            ["Total Revenue", f"${s.get('total_revenue', 0):,.2f}"],
+            ["Total Transactions", f"{s.get('total_transactions', 0):,}"],
+            ["Total Products", f"{s.get('total_products', 0):,}"],
+            ["Total Customers", f"{s.get('total_customers', 0):,}"],
+            ["Avg Transaction Value", f"${s.get('avg_transaction_value', 0):,.2f}"],
+            ["Multi-item %", f"{s.get('multi_item_percentage', 0):.1f}%"],
+        ]
+        t = Table(rows, colWidths=[6 * cm, 8 * cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.whitesmoke),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 12))
+
+    if "top_rules" in sections and payloads.get("rules"):
+        story.append(Paragraph("Top Association Rules", h2))
+        header = ["Antecedent", "Consequent", "Confidence", "Lift", "Support"]
+        rows = [header]
+        for r in payloads["rules"][:10]:
+            rows.append([r.get("antecedent", "")[:30], r.get("consequent", "")[:30], f"{r.get('confidence', 0):.3f}", f"{r.get('lift', 0):.2f}", f"{r.get('support', 0):.4f}"])
+        t = Table(rows, colWidths=[5 * cm, 5 * cm, 2.5 * cm, 2 * cm, 2.5 * cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), brand),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 12))
+
+    if "top_products" in sections and payloads.get("products"):
+        story.append(PageBreak())
+        story.append(Paragraph("Top Products by Revenue", h2))
+        header = ["Rank", "Product", "Revenue", "Transactions", "Customers"]
+        rows = [header]
+        for p in payloads["products"][:20]:
+            rows.append([str(p.get("rank", "")), p.get("description", "")[:40], f"${p.get('total_revenue', 0):,.2f}", f"{p.get('transactions', 0):,}", f"{p.get('customers', 0):,}"])
+        t = Table(rows, colWidths=[1.5 * cm, 7 * cm, 3 * cm, 3 * cm, 3 * cm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), brand),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ]))
+        story.append(t)
+
+    doc.build(story)
+    return export_id, out_path
+
+
+def dataframe_to_csv_stream(df):
+    buf = io.StringIO()
+    df.to_csv(buf, index=False)
+    buf.seek(0)
+    return buf

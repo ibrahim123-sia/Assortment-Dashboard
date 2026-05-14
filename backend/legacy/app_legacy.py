@@ -568,14 +568,14 @@ def get_association_rules():
         
         filtered_df = apply_filters(df, filters)
         
-        if len(filtered_df) < 100:  # Changed from 50 to 100 to match bundle route
+        if len(filtered_df) < 100:  
             return jsonify({
                 "success": True,
                 "data": [],
                 "message": "Insufficient data available with the selected filters. Please try broader filters or select a different country.",
                 "metadata": {
                     "filtered_records": len(filtered_df),
-                    "minimum_required": 100,  # Changed from 100 to 100
+                    "minimum_required": 100,  
                     "processing_time": round(time.time() - start_time, 2)
                 }
             })
@@ -751,7 +751,7 @@ def get_filtered_bundles():
         if df is None or len(df) == 0:
             return jsonify({"success": False, "error": "Data not loaded"}), 400
         
-        # ALIGNED PARAMETERS with association_rules
+    
         min_support = max(0.001, float(request.args.get('min_support', 0.01)))
         min_confidence = max(0.1, float(request.args.get('min_confidence', 0.3)))
         min_lift = max(0.5, float(request.args.get('min_lift', 1.0)))
@@ -778,7 +778,7 @@ def get_filtered_bundles():
                 }
             })
         
-        # SAME as association_rules: Top 100 products
+      
         top_products = filtered_df['Description'].value_counts().head(100).index.tolist()
         df_top = filtered_df[filtered_df['Description'].isin(top_products)]
         
@@ -792,7 +792,7 @@ def get_filtered_bundles():
                 }
             })
         
-        # SAME basket preparation
+       
         basket = (df_top.groupby(['InvoiceNo', 'Description'])['Quantity']
                   .sum()
                   .unstack(fill_value=0)
@@ -801,7 +801,7 @@ def get_filtered_bundles():
         
         basket_sets = (basket > 0).astype(int)
         
-        # SAME filtering: products with at least 3 transactions
+     
         column_sums = basket_sets.sum()
         columns_to_keep = column_sums[column_sums >= 3].index.tolist()
         basket_sets = basket_sets[columns_to_keep]
@@ -815,13 +815,12 @@ def get_filtered_bundles():
                     "processing_time": round(time.time() - start_time, 2)
                 }
             })
-        
-        # SAME apriori algorithm
+      
         frequent_itemsets = apriori(
             basket_sets, 
             min_support=min_support, 
             use_colnames=True,
-            max_len=2,  # SAME: 2 items only
+            max_len=2,  
             low_memory=True,
             verbose=0
         )
@@ -848,7 +847,7 @@ def get_filtered_bundles():
                 }
             })
         
-        # SAME association rules generation
+        
         rules = association_rules(
             frequent_itemsets, 
             metric="confidence", 
@@ -868,9 +867,9 @@ def get_filtered_bundles():
             })
         
         rules = rules.sort_values(['confidence', 'lift'], ascending=False)
-        rules = remove_duplicate_rules(rules)  # ADD THIS FUNCTION
+        rules = remove_duplicate_rules(rules)  
         
-        # DERIVE BUNDLES FROM ASSOCIATION RULES
+        
         bundles = []
         
         for idx, rule in rules.head(limit).iterrows():
@@ -883,7 +882,7 @@ def get_filtered_bundles():
             antecedent_name = next(iter(antecedents))
             consequent_name = next(iter(consequents))
             
-            # Calculate transaction count from support
+            
             total_transactions = len(basket_sets)
             transaction_count = int(rule['support'] * total_transactions)
             
