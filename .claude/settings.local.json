@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(Get-ChildItem -Path \"D:\\\\Assortment-Dashboard\\\\frontend\" -File | Where-Object { $_.Name -match \"vercel|package\" })"
-    ]
-  }
-}
