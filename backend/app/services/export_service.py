@@ -5,16 +5,19 @@ import uuid
 from datetime import datetime
 
 import pandas as pd
-from flask import current_app
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 
+from config import get_config
+
+config = get_config()
+
 
 def _exports_dir(store_id):
-    base = os.path.join(current_app.config["STORES_DIR"], str(store_id), "exports")
+    base = os.path.join(config.STORES_DIR, str(store_id), "exports")
     os.makedirs(base, exist_ok=True)
     return base
 

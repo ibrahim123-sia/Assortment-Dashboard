@@ -1,39 +1,41 @@
 from datetime import datetime
-from extensions import db
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy.orm import relationship
+from app.database import Base
 
 
-class Store(db.Model):
+class Store(Base):
     __tablename__ = "stores"
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    slug = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    description = db.Column(db.Text, nullable=True)
-    contact_email = db.Column(db.String(255), nullable=True)
-    is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
-    theme_mode = db.Column(db.String(16), nullable=False, default="light")
-    brand_primary_color = db.Column(db.String(16), nullable=True)
-    brand_logo_path = db.Column(db.String(512), nullable=True)
-    active_dataset_id = db.Column(db.String(36), db.ForeignKey("datasets.id", ondelete="SET NULL", use_alter=True, name="fk_store_active_dataset"), nullable=True)
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    disabled_at = db.Column(db.DateTime, nullable=True)
-    disabled_reason = db.Column(db.String(500), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(120), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    contact_email = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    theme_mode = Column(String(16), nullable=False, default="light")
+    brand_primary_color = Column(String(16), nullable=True)
+    brand_logo_path = Column(String(512), nullable=True)
+    active_dataset_id = Column(String(36), ForeignKey("datasets.id", ondelete="SET NULL", use_alter=True, name="fk_store_active_dataset"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    disabled_at = Column(DateTime, nullable=True)
+    disabled_reason = Column(String(500), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    users = db.relationship(
+    users = relationship(
         "User",
         foreign_keys="User.store_id",
         back_populates="store",
         cascade="save-update, merge",
     )
-    datasets = db.relationship(
+    datasets = relationship(
         "Dataset",
         foreign_keys="Dataset.store_id",
         back_populates="store",
         cascade="all, delete-orphan",
     )
-    active_dataset = db.relationship(
+    active_dataset = relationship(
         "Dataset",
         foreign_keys=[active_dataset_id],
         post_update=True,

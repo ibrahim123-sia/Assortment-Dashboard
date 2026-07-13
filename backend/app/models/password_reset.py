@@ -1,17 +1,18 @@
 from datetime import datetime
-from extensions import db
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from app.database import Base
 
 
-class PasswordResetToken(db.Model):
+class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token_hash = db.Column(db.String(128), nullable=False, unique=True, index=True)
-    expires_at = db.Column(db.DateTime, nullable=False, index=True)
-    used_at = db.Column(db.DateTime, nullable=True)
-    created_ip = db.Column(db.String(64), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+    created_ip = Column(String(64), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     @property
     def is_valid(self):

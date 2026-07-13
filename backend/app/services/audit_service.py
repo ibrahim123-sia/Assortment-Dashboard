@@ -1,14 +1,17 @@
-from flask import request, has_request_context
-from extensions import db
+from sqlalchemy.orm import Session
+from fastapi import Request
 from app.models import AuditLog
 
 
-def log_event(action, actor=None, target_type=None, target_id=None, metadata=None):
+def log_event(db: Session, action: str, actor=None, target_type=None, target_id=None, metadata=None, request: Request = None):
     ip = None
     ua = None
-    if has_request_context():
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-        ua = (request.headers.get("User-Agent") or "")[:512]
+    if request is not None:
+        ip = request.headers.get("X-Forwarded-For")
+        if not ip and request.client:
+            ip = request.client.host
+        ua = (request.headers.get("user-agent") or "")[:512]
+
     entry = AuditLog(
         actor_user_id=getattr(actor, "id", None),
         actor_email_snapshot=getattr(actor, "email", None),
@@ -19,8 +22,8 @@ def log_event(action, actor=None, target_type=None, target_id=None, metadata=Non
         user_agent=ua,
         meta=metadata or None,
     )
-    db.session.add(entry)
+    db.add(entry)
     try:
-        db.session.commit()
+        db.commit()
     except Exception:
-        db.session.rollback()
+        db.rollback()

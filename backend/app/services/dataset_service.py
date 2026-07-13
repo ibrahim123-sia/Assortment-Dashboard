@@ -2,29 +2,37 @@
 import os
 import uuid
 from datetime import datetime
-
 import pandas as pd
-from flask import current_app
-from werkzeug.utils import secure_filename
+from sqlalchemy.orm import Session
 
-from extensions import db
+from config import get_config
 from app.models import Dataset, DatasetStatus, Store
 from app.services import cache_service
 from app.services.audit_service import log_event
 from app.utils.column_mapping import map_column_names, validate_required_columns
 from app.utils.datetime_features import extract_datetime_features
 
+config = get_config()
 ALLOWED_EXT = {".csv", ".xlsx", ".xls"}
 
 
 def _store_dir(store_id):
-    base = os.path.join(current_app.config["STORES_DIR"], str(store_id), "datasets")
+    base = os.path.join(config.STORES_DIR, str(store_id), "datasets")
     os.makedirs(base, exist_ok=True)
     return base
 
 
 def _load_file(file_storage, tmp_path, ext):
-    file_storage.save(tmp_path)
+    # file_storage is expected to be a file-like object or FastAPI UploadFile.
+    # We will write it to tmp_path first.
+    if hasattr(file_storage, "file"):
+        # UploadFile case
+        with open(tmp_path, "wb") as f:
+            f.write(file_storage.file.read())
+    else:
+        # Werkzeug/Flask fallback or binary
+        file_storage.save(tmp_path)
+
     if ext == ".csv":
         for encoding in ("utf-8", "latin1", "ISO-8859-1", "cp1252"):
             try:
@@ -35,8 +43,9 @@ def _load_file(file_storage, tmp_path, ext):
     return pd.read_excel(tmp_path)
 
 
-def process_upload(store, file_storage, uploader):
-    filename = secure_filename(file_storage.filename or "upload.csv")
+def process_upload(db: Session, store: Store, file_storage, uploader):
+    # file_storage is FastAPI UploadFile
+    filename = os.path.basename(file_storage.filename or "upload.csv")
     _, ext = os.path.splitext(filename.lower())
     if ext not in ALLOWED_EXT:
         return {"ok": False, "error": f"Unsupported file extension '{ext}'. Use CSV or Excel.", "code": "bad_extension"}
@@ -52,12 +61,12 @@ def process_upload(store, file_storage, uploader):
         status=DatasetStatus.PROCESSING,
         uploaded_by_user_id=getattr(uploader, "id", None),
     )
-    db.session.add(dataset)
-    db.session.commit()
+    db.add(dataset)
+    db.commit()
 
     try:
         df = _load_file(file_storage, tmp_path, ext)
-        max_rows = current_app.config["MAX_ROWS_PER_DATASET"]
+        max_rows = config.MAX_ROWS_PER_DATASET
         if len(df) > max_rows:
             raise ValueError(f"Dataset has {len(df):,} rows; limit is {max_rows:,}.")
 
@@ -119,14 +128,15 @@ def process_upload(store, file_storage, uploader):
         dataset.file_size_bytes = os.path.getsize(parquet_path)
         dataset.status = DatasetStatus.READY
         dataset.validation_errors = None
-        db.session.commit()
+        db.commit()
 
         if not store.active_dataset_id:
             store.active_dataset_id = dataset.id
-            db.session.commit()
+            db.commit()
 
         cache_service.invalidate_store(store.id)
         log_event(
+            db,
             "dataset_uploaded",
             actor=uploader,
             target_type="dataset",
@@ -135,12 +145,12 @@ def process_upload(store, file_storage, uploader):
         )
         return {"ok": True, "dataset": dataset, "warnings": column_mapping}
     except Exception as exc:
-        db.session.rollback()
-        dataset = db.session.get(Dataset, dataset_id)
+        db.rollback()
+        dataset = db.get(Dataset, dataset_id)
         if dataset:
             dataset.status = DatasetStatus.FAILED
             dataset.validation_errors = {"error": str(exc)}
-            db.session.commit()
+            db.commit()
         return {"ok": False, "error": str(exc), "code": "processing_failed", "dataset_id": dataset_id}
     finally:
         if os.path.exists(tmp_path):
@@ -150,40 +160,40 @@ def process_upload(store, file_storage, uploader):
                 pass
 
 
-def activate_dataset(store, dataset, actor=None):
+def activate_dataset(db: Session, store: Store, dataset: Dataset, actor=None):
     if dataset.store_id != store.id:
         return False, "Dataset does not belong to this store"
     if dataset.status != DatasetStatus.READY:
         return False, "Dataset is not ready"
     store.active_dataset_id = dataset.id
-    db.session.commit()
+    db.commit()
     cache_service.invalidate_store(store.id)
-    log_event("dataset_activated", actor=actor, target_type="dataset", target_id=dataset.id)
+    log_event(db, "dataset_activated", actor=actor, target_type="dataset", target_id=dataset.id)
     return True, None
 
 
-def delete_dataset(store, dataset, actor=None):
+def delete_dataset(db: Session, store: Store, dataset: Dataset, actor=None):
     if dataset.store_id != store.id:
         return False, "Dataset does not belong to this store"
     if store.active_dataset_id == dataset.id:
         return False, "Cannot delete the active dataset; activate another first."
     parquet_path = dataset.parquet_path
-    db.session.delete(dataset)
-    db.session.commit()
+    db.delete(dataset)
+    db.commit()
     if parquet_path and os.path.exists(parquet_path):
         try:
             os.remove(parquet_path)
         except OSError:
             pass
     cache_service.invalidate_store(store.id, dataset.id)
-    log_event("dataset_deleted", actor=actor, target_type="dataset", target_id=dataset.id)
+    log_event(db, "dataset_deleted", actor=actor, target_type="dataset", target_id=dataset.id)
     return True, None
 
 
-def get_active_dataframe(store):
+def get_active_dataframe(db: Session, store: Store):
     if not store.active_dataset_id:
         return None, None
-    dataset = db.session.get(Dataset, store.active_dataset_id)
+    dataset = db.get(Dataset, store.active_dataset_id)
     if not dataset or dataset.status != DatasetStatus.READY:
         return None, dataset
     df = cache_service.load_dataframe(store.id, dataset.id, dataset.parquet_path)

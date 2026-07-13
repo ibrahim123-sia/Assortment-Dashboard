@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from extensions import db
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy.orm import relationship
+from app.database import Base
 
 
 class DatasetStatus:
@@ -14,25 +16,25 @@ def _uuid():
     return str(uuid.uuid4())
 
 
-class Dataset(db.Model):
+class Dataset(Base):
     __tablename__ = "datasets"
 
-    id = db.Column(db.String(36), primary_key=True, default=_uuid)
-    store_id = db.Column(db.Integer, db.ForeignKey("stores.id", ondelete="CASCADE"), nullable=False, index=True)
-    original_filename = db.Column(db.String(512), nullable=False)
-    parquet_path = db.Column(db.String(1024), nullable=True)
-    row_count = db.Column(db.Integer, nullable=True)
-    column_mapping = db.Column(db.JSON, nullable=True)
-    date_range_start = db.Column(db.DateTime, nullable=True)
-    date_range_end = db.Column(db.DateTime, nullable=True)
-    file_size_bytes = db.Column(db.Integer, nullable=True)
-    status = db.Column(db.String(32), nullable=False, default=DatasetStatus.UPLOADED, index=True)
-    validation_errors = db.Column(db.JSON, nullable=True)
-    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    uploaded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
-    notes = db.Column(db.Text, nullable=True)
+    id = Column(String(36), primary_key=True, default=_uuid)
+    store_id = Column(Integer, ForeignKey("stores.id", ondelete="CASCADE"), nullable=False, index=True)
+    original_filename = Column(String(512), nullable=False)
+    parquet_path = Column(String(1024), nullable=True)
+    row_count = Column(Integer, nullable=True)
+    column_mapping = Column(JSON, nullable=True)
+    date_range_start = Column(DateTime, nullable=True)
+    date_range_end = Column(DateTime, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    status = Column(String(32), nullable=False, default=DatasetStatus.UPLOADED, index=True)
+    validation_errors = Column(JSON, nullable=True)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    notes = Column(Text, nullable=True)
 
-    store = db.relationship(
+    store = relationship(
         "Store",
         foreign_keys=[store_id],
         back_populates="datasets",

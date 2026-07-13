@@ -1,21 +1,22 @@
 from datetime import datetime
-from extensions import db
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+from app.database import Base
 
 
-class ScheduledJob(db.Model):
+class ScheduledJob(Base):
     __tablename__ = "scheduled_jobs"
 
-    id = db.Column(db.Integer, primary_key=True)
-    store_id = db.Column(db.Integer, db.ForeignKey("stores.id", ondelete="CASCADE"), nullable=False, unique=True)
-    is_enabled = db.Column(db.Boolean, nullable=False, default=False)
-    cron_expression = db.Column(db.String(64), nullable=False, default="0 2 * * *")
-    email_summary_to = db.Column(db.String(255), nullable=True)
-    last_run_at = db.Column(db.DateTime, nullable=True)
-    last_run_status = db.Column(db.String(32), nullable=True)
-    last_run_error = db.Column(db.Text, nullable=True)
-    next_run_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id = Column(Integer, primary_key=True)
+    store_id = Column(Integer, ForeignKey("stores.id", ondelete="CASCADE"), nullable=False, unique=True)
+    is_enabled = Column(Boolean, nullable=False, default=False)
+    cron_expression = Column(String(64), nullable=False, default="0 2 * * *")
+    email_summary_to = Column(String(255), nullable=True)
+    last_run_at = Column(DateTime, nullable=True)
+    last_run_status = Column(String(32), nullable=True)
+    last_run_error = Column(Text, nullable=True)
+    next_run_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
         return {

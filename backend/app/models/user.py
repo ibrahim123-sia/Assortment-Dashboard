@@ -1,5 +1,7 @@
 from datetime import datetime
-from extensions import db
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from app.database import Base
 
 
 class UserRole:
@@ -8,26 +10,26 @@ class UserRole:
     ALL = (SUPER_ADMIN, STORE_MANAGER)
 
 
-class User(db.Model):
+class User(Base):
     __tablename__ = "users"
 
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(32), nullable=False, default=UserRole.STORE_MANAGER)
-    full_name = db.Column(db.String(255), nullable=False, default="")
-    is_email_verified = db.Column(db.Boolean, nullable=False, default=True)
-    email_verification_token = db.Column(db.String(255), nullable=True)
-    store_id = db.Column(db.Integer, db.ForeignKey("stores.id", ondelete="SET NULL"), nullable=True, index=True)
-    is_active = db.Column(db.Boolean, nullable=False, default=True)
-    must_change_password = db.Column(db.Boolean, nullable=False, default=False)
-    last_login_at = db.Column(db.DateTime, nullable=True)
-    failed_login_count = db.Column(db.Integer, nullable=False, default=0)
-    locked_until = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(32), nullable=False, default=UserRole.STORE_MANAGER)
+    full_name = Column(String(255), nullable=False, default="")
+    is_email_verified = Column(Boolean, nullable=False, default=True)
+    email_verification_token = Column(String(255), nullable=True)
+    store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    must_change_password = Column(Boolean, nullable=False, default=False)
+    last_login_at = Column(DateTime, nullable=True)
+    failed_login_count = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    store = db.relationship(
+    store = relationship(
         "Store",
         foreign_keys=[store_id],
         back_populates="users",

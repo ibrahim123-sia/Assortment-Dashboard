@@ -1,20 +1,21 @@
 from datetime import datetime
-from extensions import db
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
+from app.database import Base
 
 
-class AuditLog(db.Model):
+class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id = db.Column(db.Integer, primary_key=True)
-    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    actor_email_snapshot = db.Column(db.String(255), nullable=True)
-    action = db.Column(db.String(64), nullable=False, index=True)
-    target_type = db.Column(db.String(64), nullable=True)
-    target_id = db.Column(db.String(64), nullable=True)
-    ip_address = db.Column(db.String(64), nullable=True)
-    user_agent = db.Column(db.String(512), nullable=True)
-    meta = db.Column("metadata", db.JSON, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    id = Column(Integer, primary_key=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_email_snapshot = Column(String(255), nullable=True)
+    action = Column(String(64), nullable=False, index=True)
+    target_type = Column(String(64), nullable=True)
+    target_id = Column(String(64), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    meta = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
 
     def to_dict(self):
         return {
