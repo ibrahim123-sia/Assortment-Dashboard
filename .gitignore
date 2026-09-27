@@ -101,3 +101,9 @@ notebook/.ipynb_checkpoints/
 .mypy_cache/
 .ruff_cache/
 .pytype/
+
+# portfolio screenshot gallery (kept locally, not committed)
+screenshots/
+
+# local dev database
+*.sqlite

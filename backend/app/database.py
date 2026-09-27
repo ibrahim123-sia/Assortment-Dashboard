@@ -15,13 +15,13 @@ connect_args = {}
 if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
-engine = create_engine(
-    db_url,
-    pool_pre_ping=True,
-    pool_size=10 if not db_url.startswith("sqlite") else None,
-    max_overflow=20 if not db_url.startswith("sqlite") else None,
-    connect_args=connect_args
-)
+engine_kwargs = {"pool_pre_ping": True, "connect_args": connect_args}
+if not db_url.startswith("sqlite"):
+    # Connection pooling tuning only applies to server databases (e.g. PostgreSQL).
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+
+engine = create_engine(db_url, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
